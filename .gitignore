@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+# Local Python/runtime state.
+.venv/
+
+# Generated validation and run output.
+.tmp-validation-tests/
+outputs/
+evaluation/real-paper/cases/*/outputs/
+
+# Locally supplied research artifacts may be copyrighted or confidential.
+evaluation/real-paper/cases/*/papers/*.pdf
+
+# Locally generated handoff archives.
+EvoResearch-Handoff.zip

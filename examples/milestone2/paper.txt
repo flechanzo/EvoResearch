@@ -1,0 +1,7 @@
+# Limitations
+
+Our method uses Dataset A and achieves Metric B. It fails when the input is noisy.
+
+# Open Questions
+
+Can the method generalize to Dataset C?

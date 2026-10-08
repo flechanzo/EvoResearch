@@ -1,0 +1,10 @@
+{
+  "name": "evoresearch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-test-isolation=none --test tests/**/*.test.mjs",
+    "typecheck": "node scripts/typecheck.mjs"
+  }
+}

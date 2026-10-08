@@ -1,0 +1,57 @@
+{
+  "fixtureType": "offline_source_select_relevance_benchmark",
+  "sourceRun": "run-2026-10-03T12-42-31-800Z-c2dadfeb",
+  "scientificEvidence": false,
+  "annotationsAreRankingDiagnostics": true,
+  "cases": [
+    {
+      "caseId": "clearly-relevant-gaussian-shading",
+      "queryId": "query_5e324ed6c323029c328d14fe",
+      "literatureId": "literature_5d8da82f4610180916605018",
+      "annotation": "clearly relevant",
+      "basis": "title names Gaussian Shading, performance-lossless image watermarking, and diffusion models"
+    },
+    {
+      "caseId": "irrelevant-verification-collision",
+      "queryId": "query_a0dbca3b483ee2dd26900d7c",
+      "literatureId": "literature_541277c4dd044688cf805a45",
+      "annotation": "clearly irrelevant lexical collision",
+      "basis": "title and abstract concern computerized-tomography scanner verification"
+    },
+    {
+      "caseId": "phrase-sensitive-diffusion-watermark",
+      "queryId": "query_e22b9ba77b4b6b1b11d730e4",
+      "literatureId": "literature_92712a198b96f16de7c4b542",
+      "annotation": "phrase-sensitive relevance",
+      "basis": "abstract combines image manipulation, inversion, generative watermarking, and diffusion-model context"
+    },
+    {
+      "caseId": "generic-security-collision",
+      "queryId": "query_563246bb75d31d968bfbbd00",
+      "literatureId": "literature_bba9df63b5e98c4b5bd3c68c",
+      "annotation": "generic-term collision",
+      "basis": "privacy-preserving lossless transformer inference overlaps performance/security/losslessness without watermarking"
+    },
+    {
+      "caseId": "legitimate-shared-latent-watermark",
+      "queryId": "query_78f5b879f1a8b0edb52044c9",
+      "literatureId": "literature_9b9abf100115320323f4b34b",
+      "annotation": "legitimate shared source",
+      "basis": "same latent diffusion-watermark source is selected by related extraction, dual-mark, and Gaussian-Shading paths"
+    },
+    {
+      "caseId": "weak-ambiguous-quantum-watermark",
+      "queryId": "query_5e324ed6c323029c328d14fe",
+      "literatureId": "literature_a0ce809b1e5ca483d1fff12c",
+      "annotation": "weak/ambiguous",
+      "basis": "watermark and generative-model terms match, but the title is about quantum-circuit watermarking"
+    },
+    {
+      "caseId": "low-information-operator-query",
+      "queryId": "query_a0dbca3b483ee2dd26900d7c",
+      "literatureId": "literature_c68e8049429d3c3abde565df",
+      "annotation": "short/low-information query warning",
+      "basis": "operator, verification, and performance overlap a thermal-storage report; query lacks watermarking/domain anchors"
+    }
+  ]
+}

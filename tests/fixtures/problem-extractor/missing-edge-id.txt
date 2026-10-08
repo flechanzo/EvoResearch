@@ -1,0 +1,12 @@
+{
+  "nodes": [],
+  "edges": [
+    {
+      "edge_claim_supports_method",
+      "from": "claim_degradation_robustness",
+      "to": "method_tag_wm",
+      "relation": "SUPPORTS",
+      "evidenceIds": []
+    }
+  ]
+}

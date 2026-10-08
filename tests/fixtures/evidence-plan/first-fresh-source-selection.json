@@ -1,0 +1,313 @@
+{
+  "purpose": "Offline scheduling regression only; not scientific ground truth. Record order is authoritative SourceSelection rank. Titles are diagnostics only.",
+  "referenceRunId": "run-2026-10-04T05-14-44-337Z-66422045",
+  "selections": [
+    {
+      "retrievalNeedId": "retrieval_need_10576cd705b27cbe2937eb54",
+      "records": [
+        {
+          "literatureId": "literature_e77db958066dbeb71e115af0",
+          "title": "Paradox: Recursive Visual Entropy Key Derivation Engine (RVE-KDE) Experimental Framework for Deterministic Image Based Cryptographic Key Generation"
+        },
+        {
+          "literatureId": "literature_35b63a1f40d0bb79d11bae77",
+          "title": "Multilayer Steganalysis in the Encryption Era: A Comprehensive Review"
+        }
+      ],
+      "queryId": "query_0932fc29f50a69070730474d",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_75ec9494da225cae9f41aa2c",
+      "originProblemNodeIds": [
+        "graph_node_743557f7839fd67711691df2"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_122c48f491c9637d6aba1c94",
+      "records": [
+        {
+          "literatureId": "literature_07dfd89ad2e5737ebd3fc756",
+          "title": "SoK: Watermarking for AI-Generated Content"
+        },
+        {
+          "literatureId": "literature_49dc19059ef6562d7e6042bf",
+          "title": "Post-Quantum Cryptography for Intelligent Transportation Systems: An Implementation-Focused Review"
+        },
+        {
+          "literatureId": "literature_de5b96c6be19771238118f3e",
+          "title": "DBINDS: detection based on initial noise difference sequence from diffusion model inversion for AI-generated videos"
+        },
+        {
+          "literatureId": "literature_0e2f3763b612ed6bdc309ca6",
+          "title": "Towards Understanding Unsafe Video Generation"
+        },
+        {
+          "literatureId": "literature_354e2e73ff30f92c63ce4a82",
+          "title": "Fake Artificial Intelligence Generated Contents (FAIGC): A Survey of Theories, Detection Methods, and Opportunities"
+        }
+      ],
+      "queryId": "query_5d7e3cce31983e587892dfd3",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_6ac4e20c5cf26dda41c45714",
+      "originProblemNodeIds": [
+        "graph_node_ded99329d057d5eac11d10fd"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_122dd0dc992c184383879f55",
+      "records": [
+        {
+          "literatureId": "literature_68d01b6472a9647c868f2e47",
+          "title": "Opportunities and challenges of diffusion models for generative AI"
+        }
+      ],
+      "queryId": "query_cd9b0296e1316c313f2cec6d",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_1c7e9933e051bb41caff2271",
+      "originProblemNodeIds": [
+        "graph_node_473c3d0efd378d80fe26dc7e"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_1ee4fbb5fd92f598721ef14a",
+      "records": [
+        {
+          "literatureId": "literature_c3488af04b1c3a35d919e87d",
+          "title": "Robust JND-Guided Video Watermarking via Adaptive Block Selection and Temporal Redundancy"
+        },
+        {
+          "literatureId": "literature_403cf76c5d7064693fbc976e",
+          "title": "A Comprehensive Survey on Robustness and Privacy in Federated Learning Meets Large Language Model at Edge"
+        },
+        {
+          "literatureId": "literature_8a07027833643053fb5e641b",
+          "title": "GAN-based image protection with reversible data concealing via secret key extraction"
+        },
+        {
+          "literatureId": "literature_963ab9389148997fe845a8f6",
+          "title": "The Application of Blockchain in Social Media: A Systematic Literature Review"
+        },
+        {
+          "literatureId": "literature_b9c969394bc41a204ac059d2",
+          "title": "Security Analysis of the Estonian Internet Voting System"
+        }
+      ],
+      "queryId": "query_1380f1ef87c9d1b64f5fb291",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_f7c64d5ccf5ddc36a33a91bd",
+      "originProblemNodeIds": [
+        "graph_node_76e579ff92b2c8b283e2c999"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_266dc4acbe15534f49f332df",
+      "records": [
+        {
+          "literatureId": "literature_b0e1fe3056cc91472053f13b",
+          "title": "Fhepdm: Fully Homomorphic Encryption Secured Collaborative Anomaly Detection in Wind Turbines Predictive Maintenance"
+        },
+        {
+          "literatureId": "literature_ea232309cd6344cb751afbc0",
+          "title": "Energy efficiency in secure wireless sensor networks"
+        },
+        {
+          "literatureId": "literature_45ea5db0ddf595de215bb858",
+          "title": "Practical Secure Computation for Internet Infrastructure"
+        },
+        {
+          "literatureId": "literature_e38b999693f3ccab3942560c",
+          "title": "Secure data sharing scheme for VANETs based on edge computing"
+        },
+        {
+          "literatureId": "literature_0305a0389cc0ada3b2b13b9b",
+          "title": "Securing Near Field Communication"
+        }
+      ],
+      "queryId": "query_fb99ad94afcfe42f261f8459",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_8e1b5300153b922e0f468e0f",
+      "originProblemNodeIds": [
+        "graph_node_7c77711b88813fda688cc1f6"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_290d11493b6a9f7ca668b46b",
+      "records": [
+        {
+          "literatureId": "literature_7fcaba986ab3eab835297ea1",
+          "title": "Optimal Semi-Fragile Watermarking Based on Maximum Entropy Random Walk and Swin Transformer for Tamper Localization"
+        },
+        {
+          "literatureId": "literature_c2dfada26a45157cdb2f67d8",
+          "title": "On the Detection of Digital Face Manipulation"
+        },
+        {
+          "literatureId": "literature_af9741f23413641ceb1ccdbb",
+          "title": "Securing Digital Media Integrity: A Survey of Watermarking and Manipulation Detection for Image Authentication"
+        },
+        {
+          "literatureId": "literature_dcf17e3cd5a3585072408215",
+          "title": "Optical fragile zero-watermarking scheme for medical image tampering detection"
+        },
+        {
+          "literatureId": "literature_f35b8aa4bc87950b8eb6bcf2",
+          "title": "A blockchain-based scalable authentication framework for secure data sharing in internet of vehicles"
+        }
+      ],
+      "queryId": "query_dc71cd4b5dffe90bc0d2c255",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_b3ec5b1923dcce2d6a035d33",
+      "originProblemNodeIds": [
+        "graph_node_d5d24e2505198443bce0b5d9"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_3922316fdbfdef2ea1680d33",
+      "records": [],
+      "queryId": "query_11651dbc040cb01ae5dba45f",
+      "searchCoverageStatus": "NO_RESULTS",
+      "searchCoverageId": "coverage_2d434267404182d40828d73c",
+      "originProblemNodeIds": [
+        "graph_node_d8b752d755c63be8643bd439"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_392d5e592d67d6a3f427f259",
+      "records": [
+        {
+          "literatureId": "literature_9ccf0e331fb9942bd02d842a",
+          "title": "Watermarks are Not Verdicts: AI Provenance Marks, The EU AI Act, And Judicial Responsibility"
+        }
+      ],
+      "queryId": "query_eb7fce0c63a99124a76447de",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_45d0b2b6404c172ca3808895",
+      "originProblemNodeIds": [
+        "graph_node_52eb414a0c0c3af9f04fcc31"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_39a7a0028484aa4cb6ecfc09",
+      "records": [
+        {
+          "literatureId": "literature_d6b88ef4a6d73eb62c41bf79",
+          "title": "Blockchain-based framework and platform for validation, authentication & equivalency of academic certification and institution’s accreditation: UAE case study and system performance (2022)"
+        },
+        {
+          "literatureId": "literature_4bf292a1710491d883693fd2",
+          "title": "Threshold ECDSA with an Offline Recovery Party"
+        },
+        {
+          "literatureId": "literature_e8ebb6c47c6f779a6c8b04a5",
+          "title": "Revocable signature: handling valid but unauthorized Non-Fungible Token through Auxiliary Embedded Key"
+        },
+        {
+          "literatureId": "literature_b71573cb53dc49e14131c2a4",
+          "title": "P-CSNKS: Post-Quantum Collaborative Signature Scheme with Non-Linear Private Key Splitting Technique"
+        },
+        {
+          "literatureId": "literature_0069e07ad3e4e388efda0916",
+          "title": "A Triple Unlocking Mechanism Model Against Forging Signature Attack Based on Multivariate Polynomial Public Key Cryptosystem"
+        }
+      ],
+      "queryId": "query_2d5c27aaeba714cab947c05f",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_a4dbc820a14b1af3920a338d",
+      "originProblemNodeIds": [
+        "graph_node_c45cb499d44abe59846012b7"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_3b9240adfc309b6e08457f0b",
+      "records": [
+        {
+          "literatureId": "literature_53dc1be9114fed2ffa7b019b",
+          "title": "AnchorMark: Robust Diffusion Watermarking via Latent-Space Rotation Synchrony"
+        },
+        {
+          "literatureId": "literature_5d8da82f4610180916605018",
+          "title": "Gaussian Shading: Provable Performance-Lossless Image Watermarking for Diffusion Models"
+        },
+        {
+          "literatureId": "literature_6a336fe40b655b6d35eb14b6",
+          "title": "CoSDA: Enhancing the Robustness of Inversion-based Generative Image Watermarking Framework"
+        },
+        {
+          "literatureId": "literature_6c7d21a3527ee0ac839eac77",
+          "title": "FARI: Robust One-Step Inversion for Watermarking in Diffusion Models"
+        },
+        {
+          "literatureId": "literature_3873bbe740fe05622c46fa97",
+          "title": "Watermarking in Diffusion Model: Gaussian Shading with Exact Diffusion Inversion via Coupled Transformations (EDICT)"
+        }
+      ],
+      "queryId": "query_e59f7e19bdf33adbf584055b",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_50a21fd666a4b1e34eecded7",
+      "originProblemNodeIds": [
+        "graph_node_597948be8b75257d366139c5"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_3c58d54ba301094ae124e0e4",
+      "records": [
+        {
+          "literatureId": "literature_7395eecda186aaf6951f25b1",
+          "title": "SPFM-Net: Semantic-Prior-Guided Frequency-Constrained Mamba for Invisible Watermark Attack"
+        },
+        {
+          "literatureId": "literature_16fdd1308a8875651c7dd28c",
+          "title": "RW-PSCDLD: Robust watermarking for partial screen capture via decoupled localization and keypoint detection"
+        },
+        {
+          "literatureId": "literature_7cf5017dea117547255fa716",
+          "title": "Catch You Everything Everywhere: Guarding Textual Inversion via Concept Watermarking"
+        },
+        {
+          "literatureId": "literature_af9741f23413641ceb1ccdbb",
+          "title": "Securing Digital Media Integrity: A Survey of Watermarking and Manipulation Detection for Image Authentication"
+        },
+        {
+          "literatureId": "literature_cfe2f6a51f19137d8460658b",
+          "title": "SIGMark: Scalable In-Generation Watermark with Blind Extraction for Video Diffusion"
+        }
+      ],
+      "queryId": "query_fa81219132aa71cc3532b076",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_0cb47cfc0632083382d11f98",
+      "originProblemNodeIds": [
+        "graph_node_a5cebadbddb3fa2bfdebde09"
+      ]
+    },
+    {
+      "retrievalNeedId": "retrieval_need_44368a18a3f3f5d105cf16a7",
+      "records": [
+        {
+          "literatureId": "literature_3738b2ff55b2e54c66692fba",
+          "title": "FormalRTL: Verified RTL Synthesis at Scale"
+        },
+        {
+          "literatureId": "literature_54fb2b1abd601c4701efaad6",
+          "title": "SignMimic: Robust High-Quality Sign Language Motion Generation via Human-Shape-Oblivious Pose Transfer Guidance"
+        },
+        {
+          "literatureId": "literature_9a327bb361a2722328a23037",
+          "title": "Inference-Time Scaling for Joint Audio-Video Generation"
+        },
+        {
+          "literatureId": "literature_9db0a3911eccac064d621d59",
+          "title": "KVerus: Scalable and Resilient Formal Verification Proof Generation for Rust Code"
+        },
+        {
+          "literatureId": "literature_b6281fa0f3f59bef8e49a0a8",
+          "title": "ProtoGuide: Prototype-Driven Guidance for Class-Conditional Graph Generation"
+        }
+      ],
+      "queryId": "query_ded3a6dda387778e1a9b395d",
+      "searchCoverageStatus": "COMPLETE",
+      "searchCoverageId": "coverage_2cfc14c77e079ef80be1cf88",
+      "originProblemNodeIds": [
+        "graph_node_a64e7e025a69fc56b16321cb"
+      ]
+    }
+  ]
+}

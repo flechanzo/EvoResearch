@@ -1,0 +1,14 @@
+{
+  "caseId": "first-three",
+  "title": "Generative-image watermarking: Gaussian Shading, Gaussian Shading++, and TAG-WM",
+  "researchArea": "Generative-image watermarking and tamper-aware diffusion watermarking",
+  "paperArtifacts": [
+    { "paperId": "gaussian-shading-plus-plus", "path": "papers/2504.15026v2.pdf", "mediaType": "application/pdf" },
+    { "paperId": "gaussian-shading", "path": "papers/Gaussian shading.pdf", "mediaType": "application/pdf" },
+    { "paperId": "tag-wm", "path": "papers/TAG-WM Tamper-Aware Generative Image Watermarking via DiffusionInversion Sensitivity.pdf", "mediaType": "application/pdf" }
+  ],
+  "optionalResearchQuestion": "",
+  "corpusCutoff": "2026-09-29",
+  "expectedRelationships": [],
+  "notes": "Add only papers you are licensed to evaluate. Keep annotations separate from model outputs."
+}
