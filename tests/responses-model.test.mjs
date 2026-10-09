@@ -1,15 +1,27 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import test from 'node:test'
-import { ResponsesModelGateway, buildResponsesRequest, consumeResponsesStream, normalizeBaseUrl, parseJsonText, parseResponsesJson, parseSseEvents, reconstructStreaming } from '../src/adapters/responses-model.ts'
+import { ResponsesModelGateway, buildResponsesEndpoint, buildResponsesRequest, consumeResponsesStream, normalizeBaseUrl, parseJsonText, parseResponsesJson, parseSseEvents, reconstructStreaming } from '../src/adapters/responses-model.ts'
 
 const request = { role: 'PaperReader', stage: 'PAPER_READ', route: { provider: 'openai-compatible', model: 'configured' }, skillVersion: 'paper-reader@1', inputArtifactIds: ['artifact_1'], inputEvidenceIds: [], schemaVersion: 'm2.3', attemptId: 'attempt_1', input: { text: 'untrusted paper' }, outputSchema: 'PaperReaderOutput' }
 test('Responses URL normalization and request construction use Responses semantics', () => { assert.equal(normalizeBaseUrl('https://model.example///'), 'https://model.example'); const body = buildResponsesRequest('model-x', request, 'native_json_schema'); assert.deepEqual(body.model, 'model-x'); assert.ok(JSON.stringify(body).includes('json_schema')); assert.ok(JSON.stringify(body).includes('untrusted paper')) })
+test('Responses endpoint preserves path prefixes and appends /responses once', () => {
+  assert.equal(buildResponsesEndpoint('https://model.example/v1/'), 'https://model.example/v1/responses')
+  assert.equal(buildResponsesEndpoint('https://model.example/v1/responses'), 'https://model.example/v1/responses')
+  assert.equal(buildResponsesEndpoint('https://user:secret@model.example/v1/?token=secret#fragment'), 'https://model.example/v1/responses')
+})
 test('Responses parser handles output_text and structured content items', () => { assert.deepEqual(parseResponsesJson(JSON.stringify({ output_text: '{"ok":true}', usage: { totalTokens: 2 } })).value, { ok: true }); assert.deepEqual(parseResponsesJson(JSON.stringify({ output: [{ content: [{ type: 'output_text', text: '{"ok":false}' }] }] })).value, { ok: false }) })
 test('gateway records attempts, retries bounded server errors, and never logs API key', async () => { let calls = 0; const gateway = new ResponsesModelGateway({ baseUrl: 'https://model.example/', apiKey: 'secret-key', model: 'm', streaming: 'required', maxRetries: 1, fetchImpl: async (_url, init) => { calls++; assert.equal(init.headers.authorization, 'Bearer secret-key'); if (calls === 1) return new Response('busy', { status: 500 }); return stream(sse([{ type: 'response.output_text.delta', data: { delta: '{"ok":true}' } }, { type: 'response.completed', data: {} }])) } }); const result = await gateway.structured(request); assert.equal(result.ok, true); assert.equal(calls, 2); assert.equal(gateway.attempts.length, 2); assert.equal(JSON.stringify(gateway.attempts).includes('secret-key'), false) })
 test('configuration and malformed responses fail with recorded categories', async () => { const gateway = new ResponsesModelGateway({ baseUrl: '', apiKey: '', model: '', streaming: 'required', now: () => '2026-01-01T00:00:00Z' }); const result = await gateway.structured(request); assert.equal(result.ok, false); assert.equal(gateway.attempts[0].errorCategory, 'INVALID_RESPONSE'); const malformed = new ResponsesModelGateway({ baseUrl: 'https://x', apiKey: 'k', model: 'm', streaming: 'required', fetchImpl: async () => new Response('event: response.output_text.delta\ndata: {bad\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } }) }); const parsed = await malformed.structured(request); assert.equal(parsed.ok, false); assert.equal(malformed.attempts[0].errorCategory, 'INVALID_RESPONSE') })
 
 const sse = (events, ending = '\n') => events.map(({ type, data }) => `event: ${type}${ending}data: ${typeof data === 'string' ? data : JSON.stringify(data)}${ending}${ending}`).join('')
 const stream = (body) => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+function controlledStream(events, { delayMs = 0, close = true } = {}) {
+  const encoder = new TextEncoder(); let index = 0
+  return new Response(new ReadableStream({ async pull(controller) { if (index >= events.length) { if (close) controller.close(); return } await sleep(delayMs); const item = events[index++]; controller.enqueue(encoder.encode(sse([item]))) } }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+}
 
 test('streaming request sets stream true and reconstructs deltas with terminal usage', async () => {
   const body = buildResponsesRequest('m', request, 'prompt_json', true)
@@ -61,6 +73,88 @@ test('stream bounds enforce bytes, events, output, and duration', async () => {
   const hanging = new ReadableStream({ async pull() { await new Promise(() => {}) } })
   const timeout = await consumeResponsesStream(new Response(hanging, { headers: { 'content-type': 'text/event-stream' } }), { maxDurationMs: 10 }, 10)
   assert.equal(timeout.errorCategory, 'TIMEOUT')
+})
+
+test('stream idle timeout records a bounded no-event timeout and rejects partial JSON', async () => {
+  const prefix = JSON.parse(readFileSync(resolve('tests', 'fixtures', 'm5a-gap-discovery', 'run-a-timeout-prefix.json'), 'utf8'))
+  const hanging = new ReadableStream({ async pull() { await new Promise(() => {}) } })
+  const noEvent = await consumeResponsesStream(new Response(hanging, { headers: { 'content-type': 'text/event-stream' } }), { maxIdleMs: 10, maxDurationMs: 100 }, 100)
+  assert.equal(noEvent.errorCategory, 'TIMEOUT')
+  assert.equal(noEvent.timeoutKind, 'idle')
+  assert.equal(noEvent.events, 0)
+  const partial = await consumeResponsesStream(controlledStream([{ type: prefix[0].event, data: prefix[0].data }, { type: 'response.output_text.delta', data: { delta: '{"gaps":[' } }], { delayMs: 0, close: false }), { maxIdleMs: 10, maxDurationMs: 100 }, 100)
+  assert.equal(partial.errorCategory, 'TIMEOUT')
+  assert.equal(partial.text, '')
+  assert.equal(partial.outputCharacters, 9)
+})
+
+test('active SSE deltas reset idle timeout while absolute duration remains a hard limit', async () => {
+  const active = await consumeResponsesStream(controlledStream([
+    { type: 'response.output_text.delta', data: { delta: '{"ok":' } },
+    { type: 'response.output_text.delta', data: { delta: 'true}' } },
+    { type: 'response.completed', data: {} },
+  ], { delayMs: 5 }), { maxIdleMs: 20, maxDurationMs: 200 }, 200)
+  assert.equal(active.error, undefined)
+  assert.equal(active.terminalObserved, true)
+  const indefinite = await consumeResponsesStream(controlledStream([{ type: 'response.output_text.delta', data: { delta: 'x' } }], { delayMs: 5, close: false }), { maxIdleMs: 100, maxDurationMs: 30 }, 100)
+  assert.equal(indefinite.errorCategory, 'TIMEOUT')
+  assert.equal(indefinite.timeoutKind, 'absolute')
+})
+
+test('terminal event returns without waiting for a provider that leaves the connection open', async () => {
+  const result = await consumeResponsesStream(controlledStream([
+    { type: 'response.output_text.delta', data: { delta: '{"ok":true}' } },
+    { type: 'response.completed', data: {} },
+  ], { close: false }), { maxIdleMs: 10, maxDurationMs: 100 }, 100)
+  assert.equal(result.terminalObserved, true)
+  assert.equal(result.error, undefined)
+  assert.deepEqual(parseJsonText(result.text).value, { ok: true })
+})
+
+test('Generation-0 role timeout metadata is recorded and timeout is not retried', async () => {
+  let calls = 0
+  const hanging = new ReadableStream({ async pull() { await new Promise(() => {}) } })
+  const gateway = new ResponsesModelGateway({ baseUrl: 'https://model.example', apiKey: 'k', model: 'm', streaming: 'required', maxRetries: 1, roleTimeouts: { HypothesisGenerator: { fetchTimeoutMs: 50, streamIdleTimeoutMs: 10, streamAbsoluteTimeoutMs: 100 } }, fetchImpl: async () => { calls++; return new Response(hanging, { status: 200, headers: { 'content-type': 'text/event-stream' } }) } })
+  const result = await gateway.structured({ ...request, role: 'HypothesisGenerator', stage: 'HYPOTHESIS_GENERATE' })
+  assert.equal(result.ok, false)
+  assert.equal(calls, 1)
+  assert.equal(gateway.attempts.length, 1)
+  assert.equal(gateway.attempts[0].errorCategory, 'TIMEOUT')
+  assert.equal(gateway.attempts[0].streamIdleTimeoutMs, 10)
+  assert.equal(gateway.attempts[0].streamAbsoluteTimeoutMs, 100)
+  assert.equal(gateway.attempts[0].streamEventCount, 0)
+  assert.equal(gateway.attempts[0].streamOutputCharacters, 0)
+  assert.equal(gateway.attempts[0].timeoutKind, 'idle')
+})
+
+test('timeout metadata preserves bytes, last event, and partial output length without materializing it', async () => {
+  let calls = 0
+  const gateway = new ResponsesModelGateway({ baseUrl: 'https://model.example', apiKey: 'k', model: 'm', streaming: 'required', maxRetries: 1, roleTimeouts: { HypothesisGenerator: { streamIdleTimeoutMs: 10, streamAbsoluteTimeoutMs: 100 } }, fetchImpl: async () => { calls++; return controlledStream([{ type: 'response.created', data: {} }, { type: 'response.output_text.delta', data: { delta: '{"gaps":[' } }], { close: false }) } })
+  const result = await gateway.structured({ ...request, role: 'HypothesisGenerator', stage: 'HYPOTHESIS_GENERATE' })
+  assert.equal(result.ok, false)
+  assert.equal(calls, 1)
+  assert.equal(gateway.attempts[0].errorCategory, 'TIMEOUT')
+  assert.equal(gateway.attempts[0].streamEventCount, 2)
+  assert.ok(gateway.attempts[0].streamBytes > 0)
+  assert.equal(gateway.attempts[0].streamOutputCharacters, 9)
+  assert.equal(typeof gateway.attempts[0].streamLastEventAt, 'string')
+  assert.equal(gateway.attempts[0].timeoutKind, 'idle')
+  assert.equal(gateway.attempts[0].normalizedTextPresent, false)
+})
+
+test('role-specific fetch timeout aborts before the default timeout', async () => {
+  let calls = 0
+  const started = Date.now()
+  const gateway = new ResponsesModelGateway({ baseUrl: 'https://model.example', apiKey: 'k', model: 'm', streaming: 'required', timeoutMs: 500, maxRetries: 0, roleTimeouts: { Generation0: { fetchTimeoutMs: 10 } }, fetchImpl: async (_url, init) => {
+    calls += 1
+    await new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true }))
+    throw new Error('unreachable')
+  } })
+  const result = await gateway.structured({ ...request, role: 'Generation0', stage: 'GENERATION_0' })
+  assert.equal(result.ok, false)
+  assert.equal(gateway.attempts[0].errorCategory, 'TIMEOUT')
+  assert.equal(calls, 1)
+  assert.ok(Date.now() - started < 250)
 })
 
 test('gateway uses required streaming and records event metadata', async () => {

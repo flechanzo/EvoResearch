@@ -3,14 +3,14 @@ import type { ModelGateway, ModelRequest, ModelResponseDiagnostic, ModelRoute } 
 import type { Evidence, Timestamp } from '../domain/types.ts'
 import { ValidationError } from '../domain/validation.ts'
 import { discoverResearchGaps } from '../milestone4a/gap-discovery.ts'
-import { validateResearchGap } from '../milestone4a/validation.ts'
+import { COVERAGE_GAP_KINDS, GAP_KINDS, RESEARCH_GAP_KINDS, validateResearchGap } from '../milestone4a/validation.ts'
 import type {
   GapDiscoveryInput, GapDiscoveryResult, GapKind, GapCoverageState, GapEpistemicStatus, ResearchGap, ResearchGapKind, CoverageGapKind,
 } from '../milestone4a/types.ts'
 import { projectM5AInput, type M5AProjectionLimits, type M5AScientificInputProjection } from './projection.ts'
 
-const RESEARCH_KINDS: readonly ResearchGapKind[] = ['OPEN_QUESTION', 'KNOWN_LIMITATION', 'UNTESTED_ASSUMPTION', 'CONTRADICTORY_EVIDENCE', 'UNEXPLAINED_FAILURE', 'METHOD_INCOMPATIBILITY', 'MISSING_COMPARISON', 'UNRESOLVED_MECHANISM']
-const COVERAGE_KINDS: readonly CoverageGapKind[] = ['INCOMPLETE_EVIDENCE_COVERAGE', 'DEFERRED_EVIDENCE_WORK', 'FAILED_RETRIEVAL', 'NO_RESULTS_RETRIEVAL', 'ABSTRACT_ONLY_EVIDENCE', 'MISSING_QUANTITATIVE_EVIDENCE', 'BUDGET_EXHAUSTION']
+const RESEARCH_KINDS: readonly ResearchGapKind[] = RESEARCH_GAP_KINDS
+const COVERAGE_KINDS: readonly CoverageGapKind[] = COVERAGE_GAP_KINDS
 
 export interface M5AGapReasoningOptions {
   readonly gateway?: ModelGateway
@@ -21,6 +21,8 @@ export interface M5AGapReasoningOptions {
   readonly candidateBudget?: number
   readonly now?: Timestamp
   readonly inputArtifactIds?: readonly string[]
+  /** Historical fixtures can opt into the pre-v2 envelope explicitly. */
+  readonly envelopeVersion?: 'm5a.gap-proposal.v2' | 'm5a.legacy.v1'
 }
 
 export interface M5AGapReasoningAttempt {
@@ -49,6 +51,13 @@ export interface M5AGapReasoningResult {
   readonly attempts: readonly M5AGapReasoningAttempt[]
   readonly modelAttempted: boolean
   readonly limitations: readonly string[]
+  readonly modelEnvelopeVersion: 'm5a.gap-proposal.v2' | 'm5a.legacy.v1'
+  readonly canonicalGapSchemaVersion: 'm4a.gap-discovery.v1'
+  readonly materialization: {
+    readonly status: 'NOT_RUN' | 'SUCCEEDED' | 'FAILED'
+    readonly acceptedGapCount: number
+    readonly rejectedReasons: readonly string[]
+  }
 }
 
 interface RawGapEnvelope { readonly gaps?: unknown }
@@ -66,8 +75,34 @@ const MODEL_GAP_FIELDS = new Set([
   'epistemicStatus',
 ])
 
+/** Relations that can be proposed by the model. Role and canonical evidence
+ * arrays are materialized from the authoritative evidence records. */
+export const GAP_EVIDENCE_RELATIONS = ['SUPPORTS', 'CONTRADICTS', 'QUALIFIES', 'MOTIVATES', 'INSUFFICIENT'] as const
+export type GapEvidenceRelation = typeof GAP_EVIDENCE_RELATIONS[number]
+export const MODEL_GAP_PROPOSAL_FIELDS = new Set(['kind', 'statement', 'rationale', 'coverageState', 'sourceProblemIds', 'sourceClaimIds', 'evidenceReferences', 'uncertainty'])
+export const MODEL_GAP_ENVELOPE_VERSION = 'm5a.gap-proposal.v2' as const
+export const CANONICAL_GAP_SCHEMA_VERSION = 'm4a.gap-discovery.v1' as const
+
 function text(value: unknown): string { return typeof value === 'string' ? value.trim() : '' }
-function unsupportedScientificLanguage(value: string): boolean { return /\b(verified|proven|true|false|novel|novelty|no literature|absence of literature|no evidence|falsified)\b/i.test(value) }
+
+/**
+ * Reject unbounded epistemic claims while allowing evidence-relative
+ * uncertainty.  A broad `no evidence` blacklist made RUN B's bounded
+ * rationale fail even though it explicitly referred to the supplied
+ * projection and a missing validation study.  Keep the firewall semantic:
+ * global absence/novelty and unqualified truth/falsity remain forbidden.
+ */
+function unsupportedScientificLanguage(value: string): boolean {
+  const normalized = normalize(value)
+  const boundedContext = /\b(?:supplied|provided|available|recorded|source|projection|input|context|material|evidence|study|experiment|operation|retrieval|corpus|dataset)\b/i.test(normalized)
+  const uncertainty = /\b(?:not|no|never|without|insufficient|incomplete|unresolved|untested|uncertain|unknown|unverified|unvalidated|unestablished|does not|cannot|lack(?:s|ing)?)\b/i.test(normalized)
+  if (/\b(?:nobody|no one)\s+(?:has\s+)?(?:studied|investigated|examined|reported|tested)\b/i.test(normalized)) return true
+  if (/\b(?:no|without)\s+(?:prior|previous)\s+(?:work|study|research|literature)\s+(?:exists|is available|was conducted|has been done)\b/i.test(normalized)) return true
+  if (/\b(?:novel|novelty|absence of literature|no literature)\b/i.test(normalized) && !(boundedContext && uncertainty)) return true
+  if (/\b(?:verified|proven|proof|true|false|falsified|proves|demonstrates|establishes|confirms)\b/i.test(normalized) && !(boundedContext && uncertainty)) return true
+  if (/\bno evidence\b/i.test(normalized) && !(boundedContext && uncertainty)) return true
+  return false
+}
 function strings(value: unknown, path: string, required = false): string[] {
   if (value === undefined && !required) return []
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item.trim())) throw new ValidationError('expected string array', path, 'INVALID_MODEL_OUTPUT')
@@ -92,6 +127,15 @@ function evidenceIsModelInterpretation(evidence: Evidence & Record<string, unkno
 }
 function sorted(values: Iterable<string>): string[] { return [...new Set([...values].filter(Boolean))].sort((a, b) => a.localeCompare(b)) }
 function gapSignature(gap: ResearchGap): string { return normalize(JSON.stringify({ kind: gap.kind, statement: normalize(gap.statement), sourceProblemNodeIds: sorted(gap.sourceProblemNodeIds), sourceClaimIds: sorted(gap.sourceClaimIds), sourceEvidenceIds: sorted(gap.sourceEvidenceIds) })) }
+function isRetryableGapContractError(error: unknown, message: string): boolean {
+  if (!(error instanceof ValidationError)) return true
+  if (error.code === 'INVALID_MODEL_OUTPUT' && !error.path.endsWith('.coverageState')) return true
+  // A model that confuses direct evidence with model interpretation has
+  // returned the right bounded object shape with one repairable field-role
+  // violation. Retry once with the exact provenance correction; dangling IDs
+  // and scientific-policy violations remain terminal.
+  return error.code === 'INVALID_PROVENANCE' && /model interpretation evidence .* cannot (?:be|support)/iu.test(message)
+}
 
 function sourceTextMatches(input: GapDiscoveryInput, statement: string, evidenceById: ReadonlyMap<string, Evidence & Record<string, unknown>>): boolean {
   const target = normalize(statement)
@@ -173,11 +217,11 @@ function validateOriginRefs(raw: Record<string, unknown>, input: GapDiscoveryInp
   return { limitations: check('originatingLimitations', 'limitation'), openQuestions: check('originatingOpenQuestions', 'open-question'), assumptions: check('originatingAssumptions', 'assumption'), failureCases: check('originatingFailureCases', 'failure-case') }
 }
 
-function canonicalGap(raw: unknown, input: GapDiscoveryInput, baseline: GapDiscoveryResult): ResearchGap {
+function canonicalGapLegacy(raw: unknown, input: GapDiscoveryInput, baseline: GapDiscoveryResult): ResearchGap {
   const item = object(raw, '$.gaps[]')
   rejectUnknownFields(item, MODEL_GAP_FIELDS, '$.gaps[]')
   const kindText = text(item.kind)
-  if (![...RESEARCH_KINDS, ...COVERAGE_KINDS].includes(kindText as GapKind)) throw new ValidationError('unsupported gap kind', '$.gaps[].kind', 'INVALID_MODEL_OUTPUT')
+  if (!GAP_KINDS.includes(kindText as GapKind)) throw new ValidationError('unsupported gap kind', '$.gaps[].kind', 'INVALID_MODEL_OUTPUT')
   const statement = text(item.statement)
   if (!statement) throw new ValidationError('gap statement is required', '$.gaps[].statement', 'INVALID_MODEL_OUTPUT')
   if (unsupportedScientificLanguage(statement)) throw new ValidationError('gap statement contains unsupported truth, novelty, falsity, or absence language', '$.gaps[].statement', 'UNSUPPORTED_SCIENTIFIC_CONCLUSION')
@@ -242,37 +286,138 @@ function canonicalGap(raw: unknown, input: GapDiscoveryInput, baseline: GapDisco
   return candidate
 }
 
+function authoritativeEvidenceRole(evidence: Evidence & Record<string, unknown>, path: string): 'DIRECT' | 'MODEL_INTERPRETATION' {
+  if (!evidence || typeof evidence !== 'object' || !evidence.provenance || typeof evidence.provenance !== 'object' || typeof evidence.provenance.sourceType !== 'string') {
+    throw new ValidationError('evidence record has incomplete provenance metadata', path, 'INVALID_PROVENANCE')
+  }
+  return evidenceIsModelInterpretation(evidence) ? 'MODEL_INTERPRETATION' : 'DIRECT'
+}
+
+interface ModelGapProposal {
+  readonly kind: unknown
+  readonly statement: unknown
+  readonly rationale?: unknown
+  readonly coverageState: unknown
+  readonly sourceProblemIds?: unknown
+  readonly sourceClaimIds?: unknown
+  readonly evidenceReferences?: unknown
+  readonly uncertainty?: unknown
+}
+
+/** Convert the compact model proposal into the canonical ResearchGap shape.
+ * Evidence role is looked up from the bounded input and cannot be authored by
+ * the model. */
+function canonicalGapProposal(raw: unknown, input: GapDiscoveryInput, baseline: GapDiscoveryResult): ResearchGap {
+  const item = object(raw, '$.gaps[]') as unknown as ModelGapProposal
+  rejectUnknownFields(item as unknown as Record<string, unknown>, MODEL_GAP_PROPOSAL_FIELDS, '$.gaps[]')
+  const kindText = text(item.kind)
+  if (!GAP_KINDS.includes(kindText as GapKind)) throw new ValidationError('unsupported gap kind', '$.gaps[].kind', 'INVALID_MODEL_OUTPUT')
+  const statement = text(item.statement)
+  if (!statement) throw new ValidationError('gap statement is required', '$.gaps[].statement', 'INVALID_MODEL_OUTPUT')
+  if (unsupportedScientificLanguage(statement)) throw new ValidationError('gap statement contains unsupported truth, novelty, falsity, or absence language', '$.gaps[].statement', 'UNSUPPORTED_SCIENTIFIC_CONCLUSION')
+  if (item.rationale !== undefined && typeof item.rationale !== 'string') throw new ValidationError('rationale must be a string', '$.gaps[].rationale', 'INVALID_MODEL_OUTPUT')
+  const rationale = text(item.rationale)
+  if (rationale && unsupportedScientificLanguage(rationale)) throw new ValidationError('gap rationale contains unsupported truth, novelty, falsity, or absence language', '$.gaps[].rationale', 'UNSUPPORTED_SCIENTIFIC_CONCLUSION')
+  if (item.uncertainty !== undefined) {
+    const uncertainty = object(item.uncertainty, '$.gaps[].uncertainty')
+    rejectUnknownFields(uncertainty, new Set(['level', 'reasons']), '$.gaps[].uncertainty')
+    finite(uncertainty.level, '$.gaps[].uncertainty.level')
+    strings(uncertainty.reasons, '$.gaps[].uncertainty.reasons')
+  }
+  const sourceProblemIds = strings(item.sourceProblemIds, '$.gaps[].sourceProblemIds')
+  const sourceClaimIds = strings(item.sourceClaimIds, '$.gaps[].sourceClaimIds')
+  const referencesValue = item.evidenceReferences === undefined ? [] : item.evidenceReferences
+  if (!Array.isArray(referencesValue)) throw new ValidationError('expected evidenceReferences array', '$.gaps[].evidenceReferences', 'INVALID_MODEL_OUTPUT')
+  const evidenceById = new Map<string, Evidence & Record<string, unknown>>(evidenceFromInput(input).map(evidence => [String(evidence.evidenceId), evidence]))
+  const knownNodes = graphNodeIds(input); const knownClaims = claimIds(input); const knownEvidence = evidenceIds(input); const directIds = directEvidenceIds(input)
+  sourceProblemIds.forEach(id => { if (!knownNodes.has(id)) throw new ValidationError(`unknown graph node/problem ID ${id}`, '$.gaps[].sourceProblemIds', 'INVALID_PROVENANCE') })
+  sourceClaimIds.forEach(id => { if (!knownClaims.has(id)) throw new ValidationError(`unknown claim ID ${id}`, '$.gaps[].sourceClaimIds', 'INVALID_PROVENANCE') })
+  const relationByEvidence = new Map<string, GapEvidenceRelation>()
+  for (let index = 0; index < referencesValue.length; index++) {
+    const reference = object(referencesValue[index], `$.gaps[].evidenceReferences[${index}]`)
+    rejectUnknownFields(reference, new Set(['evidenceId', 'relation']), `$.gaps[].evidenceReferences[${index}]`)
+    const id = text(reference.evidenceId)
+    if (!id) throw new ValidationError('evidenceId is required', `$.gaps[].evidenceReferences[${index}].evidenceId`, 'INVALID_MODEL_OUTPUT')
+    if (!knownEvidence.has(id)) throw new ValidationError(`unknown evidence ID ${id}`, `$.gaps[].evidenceReferences[${index}].evidenceId`, 'INVALID_PROVENANCE')
+    const relation = text(reference.relation) as GapEvidenceRelation
+    if (!GAP_EVIDENCE_RELATIONS.includes(relation)) throw new ValidationError(`unsupported evidence relation ${relation}`, `$.gaps[].evidenceReferences[${index}].relation`, 'INVALID_MODEL_OUTPUT')
+    const prior = relationByEvidence.get(id)
+    if (prior && prior !== relation) throw new ValidationError(`evidence ${id} has contradictory relations ${prior} and ${relation}`, `$.gaps[].evidenceReferences[${index}]`, 'INVALID_PROVENANCE')
+    relationByEvidence.set(id, relation)
+  }
+  const sourceEvidenceIds: string[] = []; const interpretationEvidenceIds: string[] = []; const supportingEvidenceIds: string[] = []; const contradictingEvidenceIds: string[] = []
+  for (const id of [...relationByEvidence.keys()].sort((a, b) => a.localeCompare(b))) {
+    const evidence = evidenceById.get(id)!
+    const role = authoritativeEvidenceRole(evidence, '$.gaps[].evidenceReferences')
+    if (role === 'DIRECT') {
+      sourceEvidenceIds.push(id)
+      if (relationByEvidence.get(id) === 'SUPPORTS') supportingEvidenceIds.push(id)
+      if (relationByEvidence.get(id) === 'CONTRADICTS') contradictingEvidenceIds.push(id)
+    } else interpretationEvidenceIds.push(id)
+  }
+  const requestedCoverage = text(item.coverageState)
+  if (requestedCoverage === 'MIXED' && sourceProblemIds.length === 0 && sourceClaimIds.length === 0 && sourceEvidenceIds.length === 0) {
+    throw new ValidationError('mixed gap requires independent scientific graph, claim, or direct evidence provenance', '$.gaps[]', 'INVALID_PROVENANCE')
+  }
+  const nodes = new Map<string, (typeof input.problemGraph.nodes)[number]>(input.problemGraph.nodes.map(node => [String(node.nodeId), node]))
+  const origins = { limitations: [] as string[], openQuestions: [] as string[], assumptions: [] as string[], failureCases: [] as string[] }
+  for (const id of sourceProblemIds) {
+    const type = nodes.get(id)!.type
+    if (type === 'limitation') origins.limitations.push(id)
+    if (type === 'open-question') origins.openQuestions.push(id)
+    if (type === 'assumption') origins.assumptions.push(id)
+    if (type === 'failure-case') origins.failureCases.push(id)
+  }
+  const legacy = {
+    kind: kindText, statement, coverageState: item.coverageState, rationale,
+    sourceProblemNodeIds: sourceProblemIds, sourceClaimIds,
+    sourceEvidenceIds, interpretationEvidenceIds, supportingEvidenceIds, contradictingEvidenceIds,
+    originatingLimitations: origins.limitations, originatingOpenQuestions: origins.openQuestions,
+    originatingAssumptions: origins.assumptions, originatingFailureCases: origins.failureCases,
+    uncertainty: item.uncertainty,
+  }
+  const candidate = canonicalGapLegacy(legacy, input, baseline)
+  return rationale ? { ...candidate, rationale } : candidate
+}
+
 function modelRequest(projection: M5AScientificInputProjection, options: M5AGapReasoningOptions, attemptNumber: number): ModelRequest<unknown> {
   if (!options.route) throw new ValidationError('route is required when GapDiscovery model reasoning is enabled', '$.route', 'INVALID_MODEL_ROUTE')
   const skillVersion = options.skillVersion ?? 'gap-discovery@1'
+  const envelopeVersion = options.envelopeVersion ?? MODEL_GAP_ENVELOPE_VERSION
+  if (envelopeVersion === 'm5a.legacy.v1') return legacyModelRequest(projection, options, attemptNumber)
+  const evidenceByAuthoritativeRole = {
+    directSourceEvidenceIds: projection.evidence.filter(item => !evidenceIsModelInterpretation(item)).map(item => item.evidenceId).sort(),
+    modelInterpretationEvidenceIds: projection.evidence.filter(item => evidenceIsModelInterpretation(item)).map(item => item.evidenceId).sort(),
+  }
   return {
     role: 'GapDiscovery', stage: 'GAP_DISCOVERY', route: options.route, skillVersion,
-    inputArtifactIds: (options.inputArtifactIds ?? [projection.projectionId]) as never, inputEvidenceIds: projection.includedEvidenceIds as never, schemaVersion: 'm5a.1', attemptId: deterministicId('attempt', { role: 'GapDiscovery', projectionId: projection.projectionId, skillVersion, attemptNumber }) as string,
+    inputArtifactIds: (options.inputArtifactIds ?? [projection.projectionId]) as never, inputEvidenceIds: projection.includedEvidenceIds as never, schemaVersion: MODEL_GAP_ENVELOPE_VERSION, attemptId: deterministicId('attempt', { role: 'GapDiscovery', projectionId: projection.projectionId, skillVersion, attemptNumber, envelopeVersion }) as string,
     input: {
       projection,
       contract: {
         envelope: 'object with exactly one property: gaps',
         gaps: 'array of gap objects; an empty array is valid',
         fields: {
-          kind: 'required enum: OPEN_QUESTION | KNOWN_LIMITATION | UNTESTED_ASSUMPTION | CONTRADICTORY_EVIDENCE | UNEXPLAINED_FAILURE | METHOD_INCOMPATIBILITY | MISSING_COMPARISON | UNRESOLVED_MECHANISM | INCOMPLETE_EVIDENCE_COVERAGE | DEFERRED_EVIDENCE_WORK | FAILED_RETRIEVAL | NO_RESULTS_RETRIEVAL | ABSTRACT_ONLY_EVIDENCE | MISSING_QUANTITATIVE_EVIDENCE | BUDGET_EXHAUSTION',
+          kind: `required enum: ${GAP_KINDS.join(' | ')}`,
           coverageState: 'required enum: SCIENTIFIC | COVERAGE_ONLY | MIXED',
-          statement: 'required non-empty string', rationale: 'optional non-empty string',
-          sourceProblemNodeIds: 'optional string[]; only IDs in the supplied projection',
+          statement: 'required non-empty string', rationale: 'optional bounded evidence-relative explanation; state what the supplied projection/evidence does or does not establish, and do not make global novelty, absence, truth, falsity, or proof claims',
+          sourceProblemIds: 'optional string[]; only IDs in the supplied projection',
           sourceClaimIds: 'optional string[]; only IDs in the supplied projection',
-          sourceEvidenceIds: 'optional direct evidence ID[]; only IDs in the supplied projection',
-          interpretationEvidenceIds: 'optional model-interpretation evidence ID[]; only IDs in the supplied projection',
-          supportingEvidenceIds: 'optional direct evidence ID[]', contradictingEvidenceIds: 'optional direct evidence ID[]',
-          originatingLimitations: 'optional limitation-node ID[]', originatingOpenQuestions: 'optional open-question-node ID[]',
-          originatingAssumptions: 'optional assumption-node ID[]', originatingFailureCases: 'optional failure-case-node ID[]',
+          evidenceReferences: `optional { evidenceId, relation }[]; relation enum ${GAP_EVIDENCE_RELATIONS.join(' | ')}`,
           uncertainty: 'optional object { level: number in [0,1], reasons: string[] }',
-          epistemicStatus: 'optional advisory enum OBSERVED | MODEL_INTERPRETATION | UNRESOLVED; recomputed from bounded source content',
         },
         additionalProperties: false,
-        forbiddenFields: ['gapId', 'gapType', 'eligibility', 'sourceIds', 'claimIds', 'evidenceIds'],
-        semantics: 'Coverage-only gaps are never eligible for Generation 0. Do not claim novelty, truth, falsity, absence, support, or completeness; do not invent IDs.',
+        forbiddenFields: ['sourceEvidenceIds', 'interpretationEvidenceIds', 'supportingEvidenceIds', 'contradictingEvidenceIds', 'epistemicStatus', 'evidenceLevel', 'gapId', 'gapType', 'eligibility', 'noveltyVerified', 'survived', 'sourceIds', 'claimIds', 'evidenceIds'],
+        semantics: 'Coverage-only gaps are never eligible for Generation 0. Evidence role and supporting/contradicting arrays are materialized from authoritative evidence records; do not emit role, status, application-owned, novelty, or survival fields.',
       },
-    }, outputSchema: 'ResearchGapOutput',
+      evidenceByAuthoritativeRole,
+    }, outputSchema: 'M5AGapProposalOutput',
   }
+}
+
+function legacyModelRequest(projection: M5AScientificInputProjection, options: M5AGapReasoningOptions, attemptNumber: number): ModelRequest<unknown> {
+  const skillVersion = options.skillVersion ?? 'gap-discovery@1'
+  return { role: 'GapDiscovery', stage: 'GAP_DISCOVERY', route: options.route!, skillVersion, inputArtifactIds: (options.inputArtifactIds ?? [projection.projectionId]) as never, inputEvidenceIds: projection.includedEvidenceIds as never, schemaVersion: 'm5a.legacy.v1', attemptId: deterministicId('attempt', { role: 'GapDiscovery', projectionId: projection.projectionId, skillVersion, attemptNumber, envelopeVersion: 'm5a.legacy.v1' }) as string, input: { projection, contract: { envelope: 'legacy object with exactly one property: gaps', fields: Object.fromEntries([...MODEL_GAP_FIELDS].map(field => [field, 'legacy compatibility field'])), additionalProperties: false, forbiddenFields: ['gapId', 'gapType', 'eligibility', 'sourceIds', 'claimIds', 'evidenceIds'] } }, outputSchema: 'ResearchGapOutput' }
 }
 
 function parseEnvelope(value: unknown): readonly unknown[] {
@@ -280,6 +425,13 @@ function parseEnvelope(value: unknown): readonly unknown[] {
   rejectUnknownFields(envelope as unknown as Record<string, unknown>, new Set(['gaps']), '$')
   if (!Array.isArray(envelope.gaps)) throw new ValidationError('model output must contain gaps[]', '$.gaps', 'INVALID_MODEL_OUTPUT')
   return envelope.gaps
+}
+
+/** Explicit adapter for immutable historical artifacts. New live requests do
+ * not use this parser unless envelopeVersion is deliberately set to legacy. */
+export function validateLegacyGapDiscoveryOutput(value: unknown, input: GapDiscoveryInput): readonly ResearchGap[] {
+  const baseline = discoverResearchGaps({ ...input, now: input.now })
+  return parseEnvelope(value).map(item => canonicalGapLegacy(item, input, baseline))
 }
 
 function mergedDiscovery(baseline: GapDiscoveryResult, modelGaps: readonly ResearchGap[], rejected: readonly M5AGapReasoningRejection[], projection: M5AScientificInputProjection): GapDiscoveryResult {
@@ -298,15 +450,16 @@ export async function runModelGapDiscovery(input: GapDiscoveryInput, options: M5
   const now = options.now ?? input.now
   const baseline = discoverResearchGaps({ ...input, now })
   const projection = projectM5AInput(input, baseline.gaps, options.projectionLimits)
+  const envelopeVersion = options.envelopeVersion ?? MODEL_GAP_ENVELOPE_VERSION
   const attempts: M5AGapReasoningAttempt[] = []
   const rejected: M5AGapReasoningRejection[] = []
-  if (!options.gateway) return { schemaVersion: 'm5a.gap-reasoning.v1', gapDiscovery: baseline, baseline, modelGaps: [], rejected, projection, attempts, modelAttempted: false, limitations: [...projection.limitations] }
+  if (!options.gateway) return { schemaVersion: 'm5a.gap-reasoning.v1', gapDiscovery: baseline, baseline, modelGaps: [], rejected, projection, attempts, modelAttempted: false, limitations: [...projection.limitations], modelEnvelopeVersion: envelopeVersion, canonicalGapSchemaVersion: CANONICAL_GAP_SCHEMA_VERSION, materialization: { status: 'NOT_RUN', acceptedGapCount: 0, rejectedReasons: [] } }
   const retries = Math.max(0, Math.min(options.maxSerializationRetries ?? 1, 1))
   let priorErrors: string[] = []
   const accepted: ResearchGap[] = []
   for (let attemptNumber = 1; attemptNumber <= retries + 1; attemptNumber++) {
     const baseRequest = modelRequest(projection, options, attemptNumber)
-    const request = attemptNumber === 1 ? baseRequest : { ...baseRequest, input: { ...(baseRequest.input as Record<string, unknown>), serializationRetry: { validationErrors: priorErrors, instruction: 'Return corrected JSON only. Preserve the same scientific context and IDs; do not change scientific content.' } } }
+    const request = attemptNumber === 1 ? baseRequest : { ...baseRequest, input: { ...(baseRequest.input as Record<string, unknown>), serializationRetry: { validationErrors: priorErrors, instruction: envelopeVersion === 'm5a.legacy.v1' ? 'Return corrected JSON only. Preserve the same projection, scientific task, facts, and allowed IDs. Change serialization fields only. Direct/source evidence belongs only in sourceEvidenceIds, supportingEvidenceIds, or contradictingEvidenceIds; model-interpretation evidence belongs only in interpretationEvidenceIds.' : `Return corrected ${MODEL_GAP_ENVELOPE_VERSION} JSON only. Preserve the same projection, scientific task, evidence records, context bound, and allowed IDs. Change serialization fields only. Do not emit sourceEvidenceIds, interpretationEvidenceIds, supportingEvidenceIds, contradictingEvidenceIds, epistemicStatus, evidenceLevel, gapId, eligibility, noveltyVerified, or survived. Allowed fields: ${[...MODEL_GAP_PROPOSAL_FIELDS].join(', ')}. Allowed evidence IDs: ${projection.includedEvidenceIds.join(', ') || '(none)'}. Allowed relations: ${GAP_EVIDENCE_RELATIONS.join(', ')}. Prior diagnostics: ${priorErrors.join(' | ')}` } } }
     const result = await options.gateway.structured<unknown>(request)
     if (!result.ok) {
       const errors = [result.error]
@@ -320,7 +473,8 @@ export async function runModelGapDiscovery(input: GapDiscoveryInput, options: M5
     }
     try {
       const rawGaps = parseEnvelope(result.value)
-      const modelGaps = rawGaps.map(item => canonicalGap(item, boundedInput(input, projection), baseline))
+      const bounded = boundedInput(input, projection)
+      const modelGaps = rawGaps.map(item => envelopeVersion === 'm5a.legacy.v1' ? canonicalGapLegacy(item, bounded, baseline) : canonicalGapProposal(item, bounded, baseline))
       const diagnostic = result.diagnostic ? { ...result.diagnostic, schemaValidationStatus: 'success' as const, status: 'SUCCEEDED' as const } : undefined
       attempts.push({ attemptNumber, attemptId: request.attemptId, status: 'SUCCEEDED', validationErrors: [], request, diagnostic })
       options.gateway.annotateAttempt?.(request.attemptId, { schemaValidationStatus: 'success', status: 'SUCCEEDED' })
@@ -332,19 +486,17 @@ export async function runModelGapDiscovery(input: GapDiscoveryInput, options: M5
       const diagnostic = result.diagnostic ? { ...result.diagnostic, schemaValidationStatus: 'failure' as const, status: 'FAILED' as const, validationErrors: priorErrors } : undefined
       attempts.push({ attemptNumber, attemptId: request.attemptId, status: 'FAILED', failureKind: 'SCHEMA', validationErrors: priorErrors, request, diagnostic })
       options.gateway.annotateAttempt?.(request.attemptId, { schemaValidationStatus: 'failure', status: 'FAILED', validationErrors: priorErrors, error: message })
-      // Only malformed/structurally invalid JSON is retryable. Provenance,
-      // coverage, and unsupported-science failures terminate this model call.
-      // A missing/unknown coverage state is a semantic contract violation,
-      // even though it uses the model-output diagnostic code for compatibility;
-      // do not spend a retry trying to guess a scientific boundary.
-      const retryable = !(error instanceof ValidationError) || (error.code === 'INVALID_MODEL_OUTPUT' && !error.path.endsWith('.coverageState'))
+      // Retry only bounded serialization/contract repairs. Coverage-state,
+      // unsupported-science, dangling-reference, and other scientific-policy
+      // failures remain terminal and cannot be relaxed by a retry.
+      const retryable = isRetryableGapContractError(error, message)
       if (retryable && attemptNumber <= retries) continue
       rejected.push({ reason: message, validationCode: error instanceof ValidationError ? error.code : undefined })
       break
     }
   }
   const gapDiscovery = mergedDiscovery(baseline, accepted, rejected, projection)
-  return { schemaVersion: 'm5a.gap-reasoning.v1', gapDiscovery, baseline, modelGaps: accepted, rejected, projection, attempts, modelAttempted: true, limitations: [...new Set([...projection.limitations, ...(rejected.length ? ['One or more model gap outputs were rejected; accepted gaps remain bounded by deterministic validation.'] : [])])].sort() }
+  return { schemaVersion: 'm5a.gap-reasoning.v1', gapDiscovery, baseline, modelGaps: accepted, rejected, projection, attempts, modelAttempted: true, limitations: [...new Set([...projection.limitations, ...(rejected.length ? ['One or more model gap outputs were rejected; accepted gaps remain bounded by deterministic validation.'] : [])])].sort(), modelEnvelopeVersion: envelopeVersion, canonicalGapSchemaVersion: CANONICAL_GAP_SCHEMA_VERSION, materialization: { status: rejected.length && accepted.length === 0 ? 'FAILED' : 'SUCCEEDED', acceptedGapCount: accepted.length, rejectedReasons: rejected.map(item => item.reason) } }
 }
 
 export const runM5AGapReasoning = runModelGapDiscovery

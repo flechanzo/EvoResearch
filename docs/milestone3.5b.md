@@ -10,6 +10,6 @@ Preflight command:
 node examples/evaluation/model-preflight.mjs
 ```
 
-Required environment variables are `EVORESEARCH_MODEL_BASE_URL`, `EVORESEARCH_MODEL_API_KEY`, and `EVORESEARCH_MODEL`. Optional `EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE` selects a structured-output mode. The expensive live run is intentionally not invoked in this milestone.
+The required variables are `EVORESEARCH_MODEL_BASE_URL`, `EVORESEARCH_MODEL_API_KEY`, and `EVORESEARCH_MODEL`; `EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE=prompt_json` and `EVORESEARCH_MODEL_STREAMING=required` are the expected modes. All entrypoints resolve process values over the project-root `.env`. To check configuration without making a request, run `node examples/evaluation/model-config-check.mjs`; `CONFIG_READY` does not mean the endpoint is reachable. The expensive live run is intentionally not invoked in this milestone.
 
 Preflight diagnostics are persisted by the live validation runner as `model-preflight.json`. Its maximum is two attempts: only trusted rate-limit and server-error classifications retry, while authentication, configuration, malformed, and unclassified provider failures remain non-retryable. These attempts are accounted for separately from scientific model-call budgets.

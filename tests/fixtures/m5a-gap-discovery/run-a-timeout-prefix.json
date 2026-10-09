@@ -1,0 +1,4 @@
+[
+  { "event": "response.created", "data": {} },
+  { "event": "response.in_progress", "data": {} }
+]

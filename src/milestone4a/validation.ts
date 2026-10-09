@@ -24,9 +24,10 @@ function oneOf<T extends string>(value: unknown, values: readonly T[], path: str
 function finite(value: unknown, path: string): asserts value is number { if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) throw new ValidationError('expected number in [0,1]', path, 'INVALID_GAP_RECORD') }
 function refs(values: readonly string[], known: ReadonlySet<string> | undefined, path: string): void { if (known && values.some(value => !known.has(value))) throw new ValidationError('reference does not resolve to an accepted record', path, 'INVALID_PROVENANCE') }
 
-const RESEARCH_GAP_KINDS = ['OPEN_QUESTION', 'KNOWN_LIMITATION', 'UNTESTED_ASSUMPTION', 'CONTRADICTORY_EVIDENCE', 'UNEXPLAINED_FAILURE', 'METHOD_INCOMPATIBILITY', 'MISSING_COMPARISON', 'UNRESOLVED_MECHANISM'] as const
-const COVERAGE_GAP_KINDS = ['INCOMPLETE_EVIDENCE_COVERAGE', 'DEFERRED_EVIDENCE_WORK', 'FAILED_RETRIEVAL', 'NO_RESULTS_RETRIEVAL', 'ABSTRACT_ONLY_EVIDENCE', 'MISSING_QUANTITATIVE_EVIDENCE', 'BUDGET_EXHAUSTION'] as const
-const GAP_KINDS = [...RESEARCH_GAP_KINDS, ...COVERAGE_GAP_KINDS] as const
+/** Authoritative runtime gap taxonomy shared by model-facing contracts. */
+export const RESEARCH_GAP_KINDS = ['OPEN_QUESTION', 'KNOWN_LIMITATION', 'UNTESTED_ASSUMPTION', 'CONTRADICTORY_EVIDENCE', 'UNEXPLAINED_FAILURE', 'METHOD_INCOMPATIBILITY', 'MISSING_COMPARISON', 'UNRESOLVED_MECHANISM'] as const
+export const COVERAGE_GAP_KINDS = ['INCOMPLETE_EVIDENCE_COVERAGE', 'DEFERRED_EVIDENCE_WORK', 'FAILED_RETRIEVAL', 'NO_RESULTS_RETRIEVAL', 'ABSTRACT_ONLY_EVIDENCE', 'MISSING_QUANTITATIVE_EVIDENCE', 'BUDGET_EXHAUSTION'] as const
+export const GAP_KINDS = [...RESEARCH_GAP_KINDS, ...COVERAGE_GAP_KINDS] as const
 
 export function validateResearchGap(value: unknown, context: GapValidationContext = {}): ResearchGap {
   const gap = object(value, '$') as unknown as ResearchGap

@@ -1,0 +1,21 @@
+{
+  "gaps": [
+    {
+      "kind": "UNTESTED_ASSUMPTION",
+      "coverageState": "SCIENTIFIC",
+      "statement": "The bounded fixture assumption remains untested.",
+      "sourceProblemNodeIds": ["fixture-problem-node"],
+      "sourceClaimIds": ["fixture-claim"],
+      "sourceEvidenceIds": [],
+      "interpretationEvidenceIds": ["fixture-model-interpretation-evidence"],
+      "supportingEvidenceIds": [],
+      "contradictingEvidenceIds": [],
+      "originatingLimitations": ["fixture-problem-node"],
+      "originatingOpenQuestions": [],
+      "originatingAssumptions": [],
+      "originatingFailureCases": [],
+      "uncertainty": { "level": 0.8, "reasons": ["fixture contract regression"] },
+      "rationale": "Model-interpretation evidence is carried only in interpretationEvidenceIds."
+    }
+  ]
+}

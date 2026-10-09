@@ -1,0 +1,21 @@
+{
+  "gaps": [
+    {
+      "kind": "OPEN_QUESTION",
+      "statement": "The supplied projection leaves transfer across model variants unresolved.",
+      "coverageState": "MIXED",
+      "sourceProblemNodeIds": [],
+      "sourceClaimIds": [],
+      "sourceEvidenceIds": ["evidence_04ab12c45e4132475600fcc0"],
+      "interpretationEvidenceIds": [],
+      "supportingEvidenceIds": [],
+      "contradictingEvidenceIds": [],
+      "originatingLimitations": [],
+      "originatingOpenQuestions": [],
+      "originatingAssumptions": [],
+      "originatingFailureCases": [],
+      "uncertainty": {"level": 0.8, "reasons": ["fixture"]},
+      "rationale": "bounded fixture"
+    }
+  ]
+}

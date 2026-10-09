@@ -1,0 +1,15 @@
+{
+  "gaps": [
+    {
+      "kind": "UNTESTED_ASSUMPTION",
+      "coverageState": "SCIENTIFIC",
+      "statement": "The assumption that pixel modifications produce corresponding spatial changes in DDIM-inverted latent representations remains untested in the supplied evidence.",
+      "rationale": "The projection records this as an assumption but provides no evidence of a dedicated validation across perturbation types, inversion settings, or latent-diffusion architectures.",
+      "sourceProblemNodeIds": ["fixture-problem-node"],
+      "sourceClaimIds": ["fixture-claim"],
+      "sourceEvidenceIds": ["fixture-direct-evidence"],
+      "uncertainty": { "level": 0.86, "reasons": ["The supplied evidence records the assumption but does not establish whether it holds."] },
+      "epistemicStatus": "UNRESOLVED"
+    }
+  ]
+}

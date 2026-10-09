@@ -71,6 +71,13 @@ export interface ModelResponseDiagnostic {
   readonly usage?: ModelUsage
   readonly contentType?: string
   readonly streamEventTypes?: readonly string[]
+  readonly streamIdleTimeoutMs?: number
+  readonly streamAbsoluteTimeoutMs?: number
+  readonly streamBytes?: number
+  readonly streamEventCount?: number
+  readonly streamOutputCharacters?: number
+  readonly streamLastEventAt?: string
+  readonly timeoutKind?: 'idle' | 'absolute'
   readonly terminalObserved?: boolean
   readonly normalizedTextPresent: boolean
   readonly normalizedTextHash?: string

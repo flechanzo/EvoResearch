@@ -1,0 +1,21 @@
+{
+  "gaps": [
+    {
+      "kind": "UNTESTED_ASSUMPTION",
+      "coverageState": "SCIENTIFIC",
+      "statement": "The bounded fixture assumption remains untested.",
+      "sourceProblemNodeIds": ["fixture-problem-node"],
+      "sourceClaimIds": ["fixture-claim"],
+      "sourceEvidenceIds": ["fixture-model-interpretation-evidence"],
+      "interpretationEvidenceIds": [],
+      "supportingEvidenceIds": [],
+      "contradictingEvidenceIds": [],
+      "originatingLimitations": ["fixture-problem-node"],
+      "originatingOpenQuestions": [],
+      "originatingAssumptions": [],
+      "originatingFailureCases": [],
+      "uncertainty": { "level": 0.8, "reasons": ["fixture contract regression"] },
+      "rationale": "The failed historical shape placed model-interpretation evidence in sourceEvidenceIds."
+    }
+  ]
+}

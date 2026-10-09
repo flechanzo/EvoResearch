@@ -117,7 +117,7 @@ Only the requested status vocabulary is used below.
 
 | Path | Purpose and important symbols | Current status | Dependencies / known problems |
 |---|---|---|---|
-| `src/coordinator/live-validation.ts` | Active 13-stage `runLiveCase`, dry-run, stage persistence, budgets, `OpenAlexProvider` construction | IMPLEMENTED; real-data exercised | Hardcodes provider and local HTTP model path; no DSH, injection, or resume; EVALUATE is thin |
+| `src/coordinator/live-validation.ts` | Active 13-stage `runLiveCase`, dry-run, stage persistence, budgets, `OpenAlexProvider` construction | IMPLEMENTED; real-data exercised | Uses the shared local Responses configuration resolver; still has direct provider construction, no DSH, injection, or resume; EVALUATE is thin |
 | `src/coordinator/scientific-validation.ts` | Stage names and generic coordinator contract | IMPLEMENTED; unit tested | Generic contract is not the durable run store |
 | `src/domain/types.ts` | Canonical Paper, Claim, Evidence, graph, Hypothesis, Review, MutationEdge, ExperimentDesign, budget, Event, Checkpoint types | IMPLEMENTED; parser tests | A separate M4C vector schema duplicates evaluation dimensions |
 | `src/domain/validation.ts` | Runtime `parse*` validators and invariants | IMPLEMENTED; heavily tested | Event append order and checkpoint state recomputation are not enforced |
@@ -244,15 +244,15 @@ Earlier real M3.5C history establishes progressive boundaries: 2026-09-29 runs s
 
 ### Mock, demo, and unit runs
 
-The historical handoff count was 210 tests; the current tree has 217 tests using fakes, deterministic fixtures, synthetic graph/evidence, temporary files, the Generation-0 RunStore, and source-integrity checks. M4D is an explicit one-case deterministic lifecycle fixture with hand-authored criticism and evaluation vectors. M5A `runM5AVerticalSlice` defaults to `OfflineMockModelGateway`; its replay tests verify persisted artifacts without another model call. The evidence-plan fixture and `scripts/compare-evidence-plan.mjs` are scheduling regressions, not scientific evidence. No test is a live end-to-end OpenAlex plus real-model acceptance test.
+The historical handoff count was 210 tests; the current tree has 222 tests using fakes, deterministic fixtures, synthetic graph/evidence, temporary files, the Generation-0 RunStore, and source-integrity checks. M4D is an explicit one-case deterministic lifecycle fixture with hand-authored criticism and evaluation vectors. M5A `runM5AVerticalSlice` defaults to `OfflineMockModelGateway`; its replay tests verify persisted artifacts without another model call. The evidence-plan fixture and `scripts/compare-evidence-plan.mjs` are scheduling regressions, not scientific evidence. No test is a live end-to-end OpenAlex plus real-model acceptance test.
 
 ## 8. Test status
 
 **TEST_COMMAND:** `npm test`
 
-**TOTAL:** 217
+**TOTAL:** 222
 
-**PASSED:** 217
+**PASSED:** 222
 
 **FAILED:** 0
 
@@ -339,7 +339,7 @@ EvoResearch/
 │   ├── milestone5a/
 │   ├── ports/
 │   └── config/
-├── tests/ (217 Node tests and fixtures)
+├── tests/ (222 Node tests and fixtures)
 ├── examples/ (milestone demos and evaluation entrypoints)
 ├── scripts/ (typecheck, PDF sidecar, replay/comparison helpers)
 ├── evaluation/real-paper/ (case manifest, annotations, saved outputs)
@@ -499,7 +499,7 @@ EvoResearch/
 
 验证结果（本轮无网络、无真实 Responses/OpenAlex 调用）：
 
-- `npm test`：217/217 PASS。
+- `npm test`：222/222 PASS。
 - `npm run typecheck`：PASS。
 - `node examples/evaluation/m5a-gap-generation.mjs --dry-run --input-run evaluation/real-paper/cases/first-three/outputs/run-2026-10-07T05-05-33-234Z-13a71169`：只做本地导入与预算检查，不调用模型或 OpenAlex；配置状态按命令输出记录。
 - 同一 dry-run 输出 `preflight=1`、`gapDiscovery=2`、`generation0=2`、`total=5`、`openAlex=0`、`candidateGapBudget=3`、`hypothesisBudget=3`，并报告 `modelCalls=0/openAlexCalls=0/networkCalls=0`。
@@ -507,6 +507,83 @@ EvoResearch/
 - 离线 replay 命令：`node --input-type=module -e "import { replayM5AExtensionArtifacts } from './src/milestone5a/canary.ts'; console.log(replayM5AExtensionArtifacts(process.argv[1]))" <saved-extension-directory>`（把 `<saved-extension-directory>` 替换为本轮生成的扩展目录）。
 - 本轮离线导入目录 `outputs/replay-proof-latest/run-2026-10-08T01-45-00-000Z-78b0ddf4` 已验证：`checkpointSequence=15`、`eventCount=15`、`modelCalls=0`、`searchCalls=0`；目录同时包含 `generation0-evaluate.json`、`generation0-gap_discovery.json`、`generation0-generation_0.json` 和 `generation0-manifest.json`。
 
-状态保持为：`OFFLINE_INTEGRATION: PASS`；`SAVED_RUN_INPUT: READY` 仅指保存的 M3.5C 状态可被本地读取/验证，不能解释为证据完整；`LIVE_CONFIGURATION: MISSING` 以当前进程配置检查为准；`LIVE_AFTER_PATCH: NOT_RUN`；`PHASE_1_COMPLETE: false`。当前仓库在本审计基线下没有可比较的 Git commit；本轮未执行 clean/reset/删除未跟踪文件，也未修改 `D:\deepseek-harness` 或历史 run。
+状态保持为：`OFFLINE_INTEGRATION: PASS`；`SAVED_RUN_INPUT: READY` 仅指保存的 M3.5C 状态可被本地读取/验证，不能解释为证据完整；此前环境快照的 `LIVE_CONFIGURATION: MISSING` 已由本轮零网络检查更新为 `CONFIG_READY`（仅表示本地配置完整，不表示接口已连通）；`LIVE_AFTER_PATCH: NOT_RUN`；`PHASE_1_COMPLETE: false`。当前仓库在本审计基线下没有可比较的 Git commit；本轮未执行 clean/reset/删除未跟踪文件，也未修改 `D:\deepseek-harness` 或历史 run。
 
 **补充后的最终状态：** `CURRENT_FRONTIER` 已从“尚未接入”推进到“EVALUATE 后的 opt-in GapDiscovery/Generation-0 边界”；DSH adapter/session/storage、全量来源文本核验、prior-art/falsification/feasibility/review、Pareto、实验与完整 Phase-1 direction report 仍未完成。
+
+## 17. 本地模型配置与启动检查补充（2026-10-08，Asia/Shanghai）
+
+本轮只处理本地模型配置与启动检查，没有运行真实模型 preflight、`--live`、Responses 请求或 OpenAlex 请求。仓库原有 `ResponsesModelGateway`、Responses SSE parser、`model-preflight.ts` 和 `src/config/model-config.ts` 均已存在；没有新建模型客户端或 parser。`resolveModelConfiguration` 现在作为 live、M5A、preflight CLI 和零网络配置检查的共同配置入口，优先级为当前进程环境变量 > 项目根目录 `.env`。`.env` 缺失时，只要必需进程变量齐全仍可运行。
+
+本轮只做必要接线：live coordinator 使用解析后的模型、地址、provider、structured output mode 和 streaming mode，并在安全快照中保存来源/状态；Responses gateway 与 preflight 通过同一 endpoint helper 保留已有路径前缀并只追加一次 `/responses`；非法 HTTP 地址、未替换占位符和非法模式会 fail closed 并给出诊断；新增 `examples/evaluation/model-config-check.mjs` 只解析配置，不做任何网络探测。支持两种用法：A，五个模型变量全部放在当前 PowerShell 进程；B，`.env` 保存地址、模型和模式，密钥继续放在进程环境。操作者也可接受明文风险后把密钥放进被忽略的 `.env`，但不得提交或放入交接包。`.env.example` 只含占位内容，`.gitignore` 已忽略 `.env` 且 `.env.example` 例外保留；本轮没有写入用户的真实配置，也没有发现已被 Git 跟踪的 `.env`。本次结束前的脱敏检查发现根目录 `.env` 已存在，六项配置均由 dotenv 提供并通过本地校验；未读取或输出 `.env` 原文。
+
+精确命令：
+
+- 零网络配置检查：`node examples/evaluation/model-config-check.mjs`。
+- M5A 离线检查：`node examples/evaluation/m5a-gap-generation.mjs --dry-run --input-run evaluation/real-paper/cases/first-three/outputs/run-2026-10-07T05-05-33-234Z-13a71169`。
+- 用户手动 live canary：`node examples/evaluation/m5a-gap-generation.mjs --live --input-run evaluation/real-paper/cases/first-three/outputs/<accepted-run>`。
+
+本轮验证：`npm test` 为 222/222 PASS；`npm run typecheck` PASS；配置检查和 M5A/live dry-run 均未发出网络请求。当前工作区有 `.env`，且 `.env` 未被 Git 跟踪；`.gitignore` 命中 `.env`，`.env.example` 保持可见。配置检查输出 `CONFIG_READY`、`network=NOT_ATTEMPTED`，来源为 `dotenv`；这不等于接口已经连通。
+
+M5A live canary 的五次预算计划中包含一次 preflight；本轮没有执行它。之前某个 PowerShell 窗口的临时变量不会自动进入本进程；本次检查使用的是项目根 `.env`，因此当前配置可见。若用户改用临时环境变量，应在执行命令的同一 PowerShell 中设置 `EVORESEARCH_MODEL_BASE_URL`、`EVORESEARCH_MODEL_API_KEY`、`EVORESEARCH_MODEL`、`EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE=prompt_json` 和 `EVORESEARCH_MODEL_STREAMING=required`。`LIVE_AFTER_THIS_TASK = NOT_RUN`。
+
+历史 `report.md` 中的 `Model calls: 3` 没有被改写或直接解释为真实 HTTP 请求；结合离线 replay 的 `modelCalls=0`，它应继续按历史产物/执行模式区分读取，不能当作本轮 live 调用证据。
+
+## 18. M5A failed-canary forensic repair and single re-canary (2026-10-08)
+
+The immutable historical directory `outputs/run-2026-10-08T07-46-23-305Z-5f8d686d` was re-read. Preflight succeeded and the Responses/SSE transport completed; the first GapDiscovery response failed boundary validation at `$.gaps[].sourceEvidenceIds` with `model interpretation evidence evidence_0aef6af33b733efa6f20e5bf cannot be source evidence`. The authoritative contract allows direct/source evidence only in `sourceEvidenceIds`, `supportingEvidenceIds`, and `contradictingEvidenceIds`; model-interpretation evidence must be in `interpretationEvidenceIds`. The old `model-attempts.json` contains one actual GapDiscovery gateway diagnostic plus one wrapper attempt record, not evidence of a second HTTP response. Deterministic baseline gaps were 25, 21 eligible; model gaps and accepted hypotheses were zero. Old Generation-0 `stage.started`/`stage.failed` events were emitted after the upstream failure and have not been rewritten.
+
+The repair is limited to the shared GapDiscovery retry classifier/instruction and Generation-0 event/error semantics. Exactly one retry is allowed for the confirmed model-interpretation/direct-evidence field-role error; scientific policy failures and dangling IDs remain terminal. When GapDiscovery fails, Generation-0 is represented as `BLOCKED` in stage state, emits no independent stage/model-attempt/failure events, and its checkpoint carries `BLOCKED_BY_UPSTREAM`. Canary snapshots/errors and reports identify `GAP_DISCOVERY` and preserve the validation reason. Secret-free regression fixtures are under `tests/fixtures/m5a-gap-discovery/`; tests also cover dangling problem-node and claim references.
+
+Offline verification after the repair: `npm test` 223/223 PASS, `npm run typecheck` PASS, `git diff --check` PASS, old-run replay reports `modelCalls=0` and `searchCalls=0`, and the M5A dry-run reports five planned model calls (preflight 1, GapDiscovery 2, Generation-0 2), OpenAlex 0, network 0. The zero-network configuration check reports `CONFIG_READY` from the project `.env` with `prompt_json`, `required`, `ResponsesModelGateway`, and configured/missing statuses only; no secret is persisted or displayed.
+
+The one authorized live re-canary command was run exactly once:
+
+```text
+node examples/evaluation/m5a-gap-generation.mjs --live --input-run evaluation/real-paper/cases/first-three/outputs/run-2026-10-07T05-05-33-234Z-13a71169
+```
+
+It created `outputs/run-2026-10-08T09-44-49-878Z-f65641ec`. Configuration was ready, but the single preflight request failed with `NETWORK_ERROR: fetch failed`; no GapDiscovery, Generation-0, OpenAlex, or later role request was made. The run has no checkpoint/report because the preflight gate stopped before a scientific boundary. `LIVE_AFTER_THIS_TASK = NOT_RUN` refers to any later live run; the bounded re-canary itself is complete and classified `M5A_RECANARY_PROVIDER_TEMPORARILY_UNAVAILABLE`. No retry is permitted in this task.
+
+## 19. M5A rationale contract and Generation-0 stream-timeout stabilization (2026-10-08)
+
+本轮只做离线取证、契约修复和启动前验证；没有读取或写入用户真实密钥，没有运行真实 model preflight、`--live`、Responses 请求或 OpenAlex 请求，也没有修改 RUN A/RUN B 历史产物、DSH 或后续科学角色。
+
+### 不可变产物取证
+
+- RUN A：`outputs/run-2026-10-08T11-23-02-772Z-da1afe97/`。`gap-discovery.json` 为 deterministic 25、model 2、accepted 27、rejected 0。GapDiscovery 第一实际 attempt `attempt_b8baaefc09d7154eb55d39b8` 失败于 `$.gaps[].sourceEvidenceIds`，原因是 model-interpretation evidence 被当作 direct/source evidence；第二实际 attempt `attempt_1474d5852d9503d37c7ae2c7` 成功。Generation-0 实际选择的三个 gap 是 `research_gap_05a120cd200a743910e7a3b0`、`research_gap_3fa2d597c96308614b77763e`、`research_gap_400131e10dec164b33ac542b`。
+- RUN A Generation-0 第一 attempt `attempt_584736859a2e15ea27923f23` 的历史 SSE 序列有 1,482 个事件、1,472 个 delta、终止事件已观察，但 schema 校验失败。第二 attempt `attempt_63e9c53bacf37767848fa846` 在 `2026-10-08T11:26:46.781Z` 到 `2026-10-08T11:28:47.614Z` 运行 120,833 ms，只收到 `response.created`、`response.in_progress` 两个事件，没有 delta、终止事件或可解析文本，错误为 `Responses stream timed out`。历史记录没有 `bytes` 或 `lastEventAt` 字段，所以不能补猜这些值。Run A 的真实模型预算账为 preflight 1 + GapDiscovery 2 + Generation-0 2 = 5，OpenAlex = 0。
+- RUN B：`outputs/run-2026-10-08T11-34-30-283Z-141bfcb5/`。唯一实际 GapDiscovery 响应在 `gaps[0]`、`kind=UNTESTED_ASSUMPTION`、`coverageState=SCIENTIFIC` 被拒绝。完整 rationale 为 `The projection records this as an assumption but provides no evidence of a dedicated validation across perturbation types, inversion settings, or latent-diffusion architectures.`；`no evidence` 触发了 `src/milestone5a/gap-reasoning.ts` 的 `unsupportedScientificLanguage`，由 `canonicalGap` 的 rationale 校验抛出 `UNSUPPORTED_SCIENTIFIC_CONCLUSION`。这是绑定 supplied projection 的缺失验证说明，属于 false positive。原候选同时把同一 interpretation evidence 放在 `sourceEvidenceIds` 和 `supportingEvidenceIds`，所以修复 rationale 后仍需改成 `interpretationEvidenceIds`；没有把该原候选标为合格。当前 retry classifier 不会对这类 scientific contract failure 发第二次真实请求，RUN B 的实际 retry 数为 0。
+
+### 本轮修改
+
+1. `src/milestone5a/gap-reasoning.ts` 把 rationale 规则改为上下文绑定的语义检查：允许“supplied projection/evidence 未提供专门验证”之类的 bounded wording，继续拒绝全局 novelty、prior-work absence、truth/falsity、proof、nonexistence 等结论；retry 指令保留原科学上下文和 provenance 字段角色。
+2. `src/adapters/responses-model.ts` 复用既有 Responses/SSE parser，增加 role 可注入的 fetch/stream idle/stream absolute timeout，idle 只由有效 SSE 事件重置；记录 timeout kind、事件数、字节数、输出字符数、最后有效事件时间；超时丢弃部分文本；看到 `response.completed`/`[DONE]` 后立即结束读取。另修正 role-specific fetch timeout 计时器实际使用默认值的接线错误。
+3. `src/domain/extraction.ts` 扩展安全诊断字段；`src/milestone5a/canary.ts` 透传 role timeout 配置，不改变五次总预算或 retry policy。
+4. `.agents/skills/gap-discovery/SKILL.md`、`docs/milestone5a.md` 补充契约边界、取证和 timeout 语义；新增两个脱敏 fixture；`tests/m5a-gap-reasoning.test.mjs`、`tests/responses-model.test.mjs`、`tests/m5a-canary.test.mjs` 补充回归覆盖。
+
+Generation-0 请求投影在本轮前已经限定为 4 个 problem nodes、2 个 claims、2 个 evidence、0 个 projection gaps，序列化约 9,937 字符；没有进一步缩小上下文，也没有改动科学提示词、GapDiscovery/Generation-0 校验规则、DSH 或后续 Agent/mutation/Pareto/实验。RUN A 的 `generation0-gap_discovery.json` sequence 12 checkpoint 的 hash、事件和 accepted artifacts 一致，但没有独立 continuation CLI 或 boundary manifest，不能安全地从该 checkpoint 恢复；静态 replay 只证明零调用验证，不能伪造可续跑能力。
+
+### 验证和操作者命令
+
+- `npm test`：232/232 PASS；包含 exact RUN B rationale text、bounded/unbounded rationale、idle/absolute stream timeout、terminal event、timeout metadata、role-specific fetch timeout 和 Generation-0 状态分层测试。
+- `npm run typecheck`：PASS。
+- M5A 离线检查（不联网）：
+
+  `node examples/evaluation/m5a-gap-generation.mjs --dry-run --input-run evaluation/real-paper/cases/first-three/outputs/run-2026-10-07T05-05-33-234Z-13a71169`
+
+- 下一步唯一允许的手动完整 M5A re-canary（本轮不执行）：
+
+  `node examples/evaluation/m5a-gap-generation.mjs --live --input-run evaluation/real-paper/cases/first-three/outputs/run-2026-10-07T05-05-33-234Z-13a71169`
+
+  该 canary 的预算仍是最多 5 次真实模型请求：preflight 1、GapDiscovery 最多 2、Generation-0 最多 2；OpenAlex 0。preflight 已包含在该 canary 中。由于没有可安全续跑的 continuation 入口，不能用 RUN A checkpoint 代替这一次完整 canary。
+
+本轮的 live 状态是 `LIVE_AFTER_THIS_TASK = NOT_RUN`。剩余阻塞是：需要用户在自己的 PowerShell 中提供当前进程可见的本地模型配置并手动执行上述一次完整 canary；该 provider 的 stream timeout/compatibility 尚未由本轮验证。历史 report 中的调用数必须继续按 execution mode、gateway、原始记录调用数和本次真实 HTTP 请求数区分，不能把 fake/replay 计数解释成真实模型调用。
+
+## 20. GapDiscovery model envelope hardening (2026-10-09)
+
+本轮继续把不可变产物 `outputs/run-2026-10-09T01-30-42-291Z-cb59b0e2` 作为取证对象，没有改写该目录，也没有执行真实模型、preflight、OpenAlex 或 `--live`。该 run 的 preflight 与 Responses/SSE transport 成功（HTTP 200、`text/event-stream`、terminal event、`prompt_json`）；GapDiscovery attempt 1 在 `$.gaps[].sourceEvidenceIds` 以 `evidence_0aef6af33b733efa6f20e5bf` 失败，retry 修正该 ID 到 interpretation 数组后又在同一字段以 `evidence_04ab12c45e4132475600fcc0` 失败。两条记录均为 `sourceTextVerified=false`，由现有权威角色规则归为 model interpretation。旧请求只给平铺 `includedEvidenceIds`，没有按角色分组，且要求模型复写 source/interpretation/support 数组；因此 prompt-only 修复无法覆盖多条记录。历史结果保持 deterministic gaps=25、eligible=21、model gaps=0、hypotheses=0、Generation-0 BLOCKED_BY_UPSTREAM。
+
+live 默认现在使用 `m5a.gap-proposal.v2`：模型只返回 `kind`、`statement`、有界 `rationale`、`coverageState`、`sourceProblemIds`、`sourceClaimIds`、`evidenceReferences[{evidenceId, relation}]` 和 `uncertainty`。角色数组、evidence level、epistemic status、gap ID、eligibility、novelty/survived 状态均为禁止字段。请求会提供应用已经计算的 `directSourceEvidenceIds` 与 `modelInterpretationEvidenceIds` 分组，但模型只提供证据引用关系。materializer 校验所有 ID、关系和 provenance，从记录派生 source/interpretation；直接证据的 SUPPORTS/CONTRADICTS 才进入 supporting/contradicting。相同引用排序去重，冲突关系 fail closed。结果继续经过原有 canonical `ResearchGap` validator，因此 coverage-only、MIXED 独立 provenance、interpretation-only、科学语言、dangling ID 和 Generation-0 firewall 均未放宽。历史 `m5a.legacy.v1` 通过显式 adapter 读取，不作为 live 默认，也不重写历史文件。
+
+报告新增 `modelEnvelopeVersion`、`canonicalGapSchemaVersion` 和 materialization 状态/拒绝原因。脱敏回归 fixture 为 `tests/fixtures/m5a-gap-discovery/latest-legacy-0aef-source.json` 与 `latest-legacy-04ab-source.json`；离线 replay/test 预期 modelCalls=0、searchCalls=0、无网络。下一步只剩用户在自己的 PowerShell 中执行一次最终 canary；本轮 `LIVE_AFTER_THIS_TASK = NOT_RUN`。

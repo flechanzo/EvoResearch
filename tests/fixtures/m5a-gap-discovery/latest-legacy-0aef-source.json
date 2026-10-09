@@ -1,0 +1,21 @@
+{
+  "gaps": [
+    {
+      "kind": "UNTESTED_ASSUMPTION",
+      "statement": "The supplied projection leaves the correspondence assumption unresolved.",
+      "coverageState": "MIXED",
+      "sourceProblemNodeIds": [],
+      "sourceClaimIds": [],
+      "sourceEvidenceIds": ["evidence_0aef6af33b733efa6f20e5bf"],
+      "interpretationEvidenceIds": [],
+      "supportingEvidenceIds": [],
+      "contradictingEvidenceIds": [],
+      "originatingLimitations": [],
+      "originatingOpenQuestions": [],
+      "originatingAssumptions": [],
+      "originatingFailureCases": [],
+      "uncertainty": {"level": 0.8, "reasons": ["fixture"]},
+      "rationale": "bounded fixture"
+    }
+  ]
+}

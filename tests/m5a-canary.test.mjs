@@ -188,6 +188,7 @@ test('M5A persistence uses one run identity, emits ordered lifecycle events, and
     const checkpoint = read(result.outputDirectory, 'checkpoint.json')
     const state = read(result.outputDirectory, 'state.json')
     const events = read(result.outputDirectory, 'events.json')
+    const gapDiscovery = read(result.outputDirectory, 'gap-discovery.json')
     assert.equal(snapshot.runId, result.runId)
     assert.equal(checkpoint.runId, result.runId)
     assert.equal(snapshot.stateHash, checkpoint.stateHash)
@@ -202,6 +203,16 @@ test('M5A persistence uses one run identity, emits ordered lifecycle events, and
     assert.match(report, /^# EvoResearch M5A canary\n/)
     assert.match(report, /Deterministic gap count:/)
     assert.match(report, /Model-generated gap count:/)
+    assert.match(report, /Execution mode: live \(injected boundary\)/)
+    assert.match(report, /Gateway: injected ModelGateway/)
+    assert.match(report, /Recorded model calls \(including preflight\): 3/)
+    assert.match(report, /This execution real HTTP requests: unknown \(injected gateway or preflight\)/)
+    assert.equal(gapDiscovery.modelEnvelopeVersion, 'm5a.gap-proposal.v2')
+    assert.equal(gapDiscovery.canonicalGapSchemaVersion, 'm4a.gap-discovery.v1')
+    assert.deepEqual(gapDiscovery.materialization, { status: 'SUCCEEDED', acceptedGapCount: 0, rejectedReasons: [] })
+    assert.match(report, /Model envelope version: m5a\.gap-proposal\.v2/)
+    assert.match(report, /Canonical gap schema version: m4a\.gap-discovery\.v1/)
+    assert.match(report, /Gap materialization status: SUCCEEDED/)
     assert.doesNotMatch(report, /^\"# EvoResearch/)
     const stageState = read(result.outputDirectory, 'stage-state.json')
     assert.equal(stageState.find(item => item.stage === 'GENERATION_0').status, 'SUCCEEDED')
@@ -211,11 +222,14 @@ test('M5A persistence uses one run identity, emits ordered lifecycle events, and
 test('M5A persisted extension replays with zero model and search calls and rejects state tampering', async () => {
   await fixture(async ({ options }) => {
     const result = await runM5ACanary({ ...options, mode: 'live', gateway: fakeGateway(), preflight: preflight() })
+    const reportPath = resolve(result.outputDirectory, 'report.md')
+    const reportBeforeReplay = readFileSync(reportPath, 'utf8')
     const replay = replayM5AExtensionArtifacts(result.outputDirectory)
     assert.equal(replay.runId, result.runId)
     assert.equal(replay.sourceRunId, result.sourceRunId)
     assert.equal(replay.modelCalls, 0)
     assert.equal(replay.searchCalls, 0)
+    assert.equal(readFileSync(reportPath, 'utf8'), reportBeforeReplay)
     const statePath = resolve(result.outputDirectory, 'state.json')
     const original = readFileSync(statePath, 'utf8')
     const tampered = JSON.parse(original)
@@ -245,14 +259,79 @@ test('M5A GapDiscovery contract failure blocks Generation-0 and is reported as f
     assert.equal(calls.filter(item => item.role === 'HypothesisGenerator').length, 0)
     const population = read(result.outputDirectory, 'generation-0.json')
     assert.equal(population.hypotheses.length, 0)
+    const gapDiscovery = read(result.outputDirectory, 'gap-discovery.json')
+    assert.equal(gapDiscovery.modelEnvelopeVersion, 'm5a.gap-proposal.v2')
+    assert.equal(gapDiscovery.canonicalGapSchemaVersion, 'm4a.gap-discovery.v1')
+    assert.equal(gapDiscovery.materialization.status, 'FAILED')
+    assert.equal(gapDiscovery.materialization.acceptedGapCount, 0)
+    assert.ok(gapDiscovery.materialization.rejectedReasons.length > 0)
     assert.match(population.limitations.join(' '), /GapDiscovery model contract failed/i)
     const stages = read(result.outputDirectory, 'stage-state.json')
     assert.equal(stages.find(item => item.stage === 'GAP_DISCOVERY').status, 'FAILED')
     assert.equal(stages.find(item => item.stage === 'GENERATION_0').status, 'BLOCKED')
+    assert.match(result.errors.join(' '), /GAP_DISCOVERY_FAILED/i)
+    assert.match(result.errors.join(' '), /GENERATION_0_BLOCKED_BY_UPSTREAM/i)
+    const snapshot = read(result.outputDirectory, 'run-snapshot.json')
+    assert.equal(snapshot.failedStage, 'GAP_DISCOVERY')
     const events = read(result.outputDirectory, 'events.json')
     assert.ok(events.some(item => item.type === 'stage.failed' && item.payload.stage === 'GAP_DISCOVERY'))
+    assert.equal(events.some(item => item.payload.stage === 'GENERATION_0' && item.type === 'stage.started'), false)
+    assert.equal(events.some(item => item.payload.stage === 'GENERATION_0' && item.type === 'stage.failed'), false)
+    assert.equal(events.some(item => item.payload.role === 'HypothesisGenerator'), false)
+    assert.equal(events.at(-1).payload.status, 'BLOCKED_BY_UPSTREAM')
+    assert.equal(events.at(-1).type, 'checkpoint.created')
+    const replay = replayM5AExtensionArtifacts(result.outputDirectory)
+    assert.equal(replay.modelCalls, 0)
+    assert.equal(replay.searchCalls, 0)
+  })
+})
+
+test('M5A keeps a Generation-0 stream timeout distinct from GapDiscovery failure and does not retry it', async () => {
+  await fixture(async ({ options }) => {
+    const calls = []
+    const attempts = []
+    const gateway = {
+      calls,
+      attempts,
+      async structured(request) {
+        calls.push(request)
+        if (request.role === 'GapDiscovery') {
+          const diagnostic = { attemptId: request.attemptId, parseStatus: 'success', schemaValidationStatus: 'not-attempted', normalizedTextPresent: true, status: 'SUCCEEDED', outputTrust: 'UNTRUSTED / UNVALIDATED' }
+          attempts.push({ ...diagnostic, role: request.role, stage: request.stage, route: request.route })
+          return { ok: true, value: { gaps: [] }, diagnostic }
+        }
+        const diagnostic = { attemptId: request.attemptId, parseStatus: 'not-attempted', schemaValidationStatus: 'not-attempted', normalizedTextPresent: false, status: 'FAILED', outputTrust: 'UNTRUSTED / UNVALIDATED', errorCategory: 'TIMEOUT', error: 'Responses stream idle timed out', timeoutKind: 'idle', streamEventCount: 0, streamOutputCharacters: 0 }
+        attempts.push({ ...diagnostic, role: request.role, stage: request.stage, route: request.route })
+        return { ok: false, error: diagnostic.error, diagnostic }
+      },
+      annotateAttempt() {},
+    }
+    const result = await runM5ACanary({ ...options, mode: 'live', gateway, preflight: preflight(), maxSerializationRetries: 1 })
+    assert.equal(result.ok, true)
+    assert.equal(calls.filter(item => item.role === 'GapDiscovery').length, 1)
+    assert.equal(calls.filter(item => item.role === 'HypothesisGenerator').length, 1)
+    assert.equal(result.report.status, 'FAILED')
+    assert.equal(result.report.hypothesisCount, 0)
+    assert.match(result.errors.join(' '), /GENERATION_0_FAILED/i)
+    assert.doesNotMatch(result.errors.join(' '), /GAP_DISCOVERY_FAILED/i)
+    const stages = read(result.outputDirectory, 'stage-state.json')
+    assert.equal(stages.find(item => item.stage === 'GAP_DISCOVERY').status, 'SUCCEEDED')
+    assert.equal(stages.find(item => item.stage === 'GENERATION_0').status, 'FAILED')
+    const population = read(result.outputDirectory, 'generation-0.json')
+    assert.equal(population.modelAttempts.length, 1)
+    assert.match(population.modelAttempts[0].validationErrors.join(' '), /timed out/i)
+    assert.equal(population.modelAttempts[0].diagnostic.errorCategory, 'TIMEOUT')
+    const report = readFileSync(resolve(result.outputDirectory, 'report.md'), 'utf8')
+    assert.match(report, /GENERATION_0_FAILED/i)
+    assert.doesNotMatch(report, /GAP_DISCOVERY_FAILED/i)
+    const events = read(result.outputDirectory, 'events.json')
     assert.ok(events.some(item => item.type === 'stage.failed' && item.payload.stage === 'GENERATION_0'))
     assert.equal(events.at(-1).type, 'checkpoint.created')
+    const checkpoint = read(result.outputDirectory, 'checkpoint.json')
+    assert.equal(events.at(-1).payload.checkpointId, checkpoint.checkpointId)
+    const snapshot = read(result.outputDirectory, 'run-snapshot.json')
+    assert.equal(snapshot.failedStage, 'GENERATION_0')
+    assert.match(snapshot.error, /GENERATION_0_FAILED/i)
   })
 })
 

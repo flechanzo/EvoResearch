@@ -1,0 +1,21 @@
+{
+  "gaps": [
+    {
+      "kind": "UNTESTED_ASSUMPTION",
+      "coverageState": "SCIENTIFIC",
+      "statement": "The bounded assumption remains untested within the supplied evidence.",
+      "rationale": "The projection records this as an assumption but provides no evidence of a dedicated validation across perturbation types, inversion settings, or latent-diffusion architectures.",
+      "sourceProblemNodeIds": ["fixture-problem-node"],
+      "sourceClaimIds": ["fixture-claim"],
+      "sourceEvidenceIds": ["fixture-direct-evidence"],
+      "interpretationEvidenceIds": [],
+      "supportingEvidenceIds": [],
+      "contradictingEvidenceIds": [],
+      "originatingLimitations": ["fixture-problem-node"],
+      "originatingOpenQuestions": [],
+      "originatingAssumptions": [],
+      "originatingFailureCases": [],
+      "uncertainty": { "level": 0.86, "reasons": ["bounded rationale regression"] }
+    }
+  ]
+}

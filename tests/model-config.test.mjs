@@ -76,5 +76,53 @@ test('invalid mode values fail closed with key-only diagnostics', () => {
   const config = resolveModelConfiguration({ environment: { EVORESEARCH_MODEL_BASE_URL: 'https://x', EVORESEARCH_MODEL_API_KEY: 'secret', EVORESEARCH_MODEL: 'm', EVORESEARCH_MODEL_STREAMING: 'sometimes', EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE: 'xml' } })
   assert.equal(config.ready, false)
   assert.deepEqual(config.invalid.sort(), ['EVORESEARCH_MODEL_STREAMING', 'EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE'])
-  assert.deepEqual(configurationDiagnostics(config).sort(), ['Invalid configuration: EVORESEARCH_MODEL_STREAMING', 'Invalid configuration: EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE'])
+  assert.deepEqual(configurationDiagnostics(config).sort(), ['Invalid configuration: EVORESEARCH_MODEL_STREAMING (must be required, preferred, or disabled)', 'Invalid configuration: EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE (must be native_json_schema, json_object, or prompt_json)'])
+})
+
+test('invalid URLs and unresolved placeholders fail closed with safe diagnostics', () => {
+  const config = resolveModelConfiguration({ environment: {
+    EVORESEARCH_MODEL_BASE_URL: 'ftp://model.example/v1',
+    EVORESEARCH_MODEL_API_KEY: '<set-locally>',
+    EVORESEARCH_MODEL: '<your-model-id>',
+    EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE: 'prompt_json',
+    EVORESEARCH_MODEL_STREAMING: 'required',
+  } })
+  assert.equal(config.ready, false)
+  assert.deepEqual(config.invalid.sort(), ['EVORESEARCH_MODEL', 'EVORESEARCH_MODEL_API_KEY', 'EVORESEARCH_MODEL_BASE_URL'])
+  const diagnostics = configurationDiagnostics(config).join('\n')
+  assert.match(diagnostics, /EVORESEARCH_MODEL_BASE_URL.*absolute http/)
+  assert.match(diagnostics, /EVORESEARCH_MODEL_API_KEY.*unresolved placeholder/)
+  assert.match(diagnostics, /EVORESEARCH_MODEL.*unresolved placeholder/)
+  assert.equal(diagnostics.includes('<set-locally>'), false)
+})
+
+test('environment-only configuration works without a dotenv file', () => {
+  const config = resolveModelConfiguration({ projectRoot: 'C:/missing-evoresearch-project', environment: {
+    EVORESEARCH_MODEL_BASE_URL: 'https://env.example/v1',
+    EVORESEARCH_MODEL_API_KEY: 'synthetic-key',
+    EVORESEARCH_MODEL: 'env-model',
+    EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE: 'prompt_json',
+    EVORESEARCH_MODEL_STREAMING: 'required',
+  }, exists: () => false })
+  assert.equal(config.ready, true)
+  assert.equal(config.dotenvLoaded, false)
+  assert.equal(config.sources.EVORESEARCH_MODEL_BASE_URL, 'process')
+  assert.equal(config.sources.EVORESEARCH_MODEL_API_KEY, 'process')
+})
+
+test('dotenv may hold non-sensitive routing values while the key stays in process environment', () => {
+  const fixture = projectWithEnv([
+    'EVORESEARCH_MODEL_BASE_URL=https://file.example/v1',
+    'EVORESEARCH_MODEL=file-model',
+    'EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE=prompt_json',
+    'EVORESEARCH_MODEL_STREAMING=required',
+  ].join('\n'))
+  try {
+    const config = resolveModelConfiguration({ projectRoot: fixture.root, environment: { EVORESEARCH_MODEL_API_KEY: 'synthetic-process-key' } })
+    assert.equal(config.ready, true)
+    assert.equal(config.baseUrl, 'https://file.example/v1')
+    assert.equal(config.model, 'file-model')
+    assert.equal(config.sources.EVORESEARCH_MODEL_BASE_URL, 'dotenv')
+    assert.equal(config.sources.EVORESEARCH_MODEL_API_KEY, 'process')
+  } finally { fixture.cleanup() }
 })

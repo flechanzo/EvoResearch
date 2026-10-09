@@ -304,3 +304,20 @@ test('dry-run validates local artifacts and reports zero network calls', () => {
   const result = dryRunCase(resolve(root, 'case.json')); assert.equal(result.zeroModelCalls, true); assert.equal(result.zeroOpenAlexCalls, true); assert.equal(result.academicProvider.networkCalls, 0); assert.equal(result.papers.length, 3)
   if (original.base === undefined) delete process.env.EVORESEARCH_MODEL_BASE_URL; else process.env.EVORESEARCH_MODEL_BASE_URL = original.base; if (original.key === undefined) delete process.env.EVORESEARCH_MODEL_API_KEY; else process.env.EVORESEARCH_MODEL_API_KEY = original.key; if (original.model === undefined) delete process.env.EVORESEARCH_MODEL; else process.env.EVORESEARCH_MODEL = original.model; rmSync(root, { recursive: true, force: true })
 })
+
+test('live configuration errors stop before preflight and cannot select a fallback endpoint', async () => {
+  const root = resolve('.tmp-invalid-live-configuration'); const outputRoot = resolve(root, 'outputs'); rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true })
+  writeFileSync(resolve(root, 'case.json'), JSON.stringify({ caseId: 'invalid-config', title: 'Invalid config', researchArea: 'watermarking', paperArtifacts: ['a.pdf', 'b.pdf', 'c.pdf'].map((path, index) => ({ paperId: `p${index}`, path, mediaType: 'application/pdf' })) }))
+  const keys = ['EVORESEARCH_MODEL_BASE_URL', 'EVORESEARCH_MODEL_API_KEY', 'EVORESEARCH_MODEL', 'EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE', 'EVORESEARCH_MODEL_STREAMING']
+  const original = Object.fromEntries(keys.map(key => [key, process.env[key]]))
+  process.env.EVORESEARCH_MODEL_BASE_URL = 'ftp://invalid.example/v1'; process.env.EVORESEARCH_MODEL_API_KEY = 'synthetic-key'; process.env.EVORESEARCH_MODEL = 'synthetic-model'; process.env.EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE = 'prompt_json'; process.env.EVORESEARCH_MODEL_STREAMING = 'required'
+  try {
+    const result = await runLiveCase(resolve(root, 'case.json'), { outputRoot })
+    assert.equal(result.status, 'FAILED'); assert.equal(result.failedStage, 'MODEL_PREFLIGHT')
+    const preflight = JSON.parse(readFileSync(resolve(result.outputDirectory, 'model-preflight.json'), 'utf8'))
+    assert.equal(preflight.final.errorCategory, 'CONFIGURATION'); assert.match(preflight.final.error, /absolute http/); assert.equal(JSON.stringify(preflight).includes('synthetic-key'), false)
+  } finally {
+    for (const [key, value] of Object.entries(original)) { if (value === undefined) delete process.env[key]; else process.env[key] = value }
+    rmSync(root, { recursive: true, force: true })
+  }
+})

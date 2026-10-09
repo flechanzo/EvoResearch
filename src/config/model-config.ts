@@ -50,6 +50,7 @@ export interface ResolvedModelConfiguration {
   readonly sources: Readonly<Record<ModelConfigurationKey, ConfigurationSource>>
   readonly missing: readonly ModelConfigurationKey[]
   readonly invalid: readonly ModelConfigurationKey[]
+  readonly invalidReasons: Readonly<Record<string, string>>
   readonly ready: boolean
 }
 
@@ -68,6 +69,7 @@ export interface SafeModelConfigurationSnapshot {
   readonly sources: Readonly<Record<ModelConfigurationKey, ConfigurationSource>>
   readonly missing: readonly ModelConfigurationKey[]
   readonly invalid: readonly ModelConfigurationKey[]
+  readonly invalidReasons: Readonly<Record<string, string>>
   readonly ready: boolean
 }
 
@@ -141,21 +143,30 @@ export function resolveModelConfiguration(options: ResolveModelConfigurationOpti
   const streaming = parseStreamingMode(values.EVORESEARCH_MODEL_STREAMING) ?? 'required'
   const missing = MODEL_CONFIGURATION_KEYS.filter(key => ['EVORESEARCH_MODEL_BASE_URL', 'EVORESEARCH_MODEL_API_KEY', 'EVORESEARCH_MODEL'].includes(key) && !trim(values[key]))
   const invalid: ModelConfigurationKey[] = []
-  if (values.EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE !== undefined && parseStructuredOutputMode(values.EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE) === undefined) invalid.push('EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE')
-  if (values.EVORESEARCH_MODEL_STREAMING !== undefined && parseStreamingMode(values.EVORESEARCH_MODEL_STREAMING) === undefined) invalid.push('EVORESEARCH_MODEL_STREAMING')
+  const invalidReasons: Record<string, string> = {}
+  const markInvalid = (key: ModelConfigurationKey, reason: string): void => { if (!invalid.includes(key)) invalid.push(key); invalidReasons[key] = reason }
+  const rawBaseUrl = trim(values.EVORESEARCH_MODEL_BASE_URL)
+  if (rawBaseUrl && !isHttpUrl(rawBaseUrl)) markInvalid('EVORESEARCH_MODEL_BASE_URL', 'must be an absolute http:// or https:// URL')
+  if (isPlaceholder(rawBaseUrl)) markInvalid('EVORESEARCH_MODEL_BASE_URL', 'contains an unresolved placeholder')
+  const rawApiKey = trim(values.EVORESEARCH_MODEL_API_KEY)
+  if (isPlaceholder(rawApiKey)) markInvalid('EVORESEARCH_MODEL_API_KEY', 'contains an unresolved placeholder')
+  const rawModel = trim(values.EVORESEARCH_MODEL)
+  if (isPlaceholder(rawModel)) markInvalid('EVORESEARCH_MODEL', 'contains an unresolved placeholder')
+  if (values.EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE !== undefined && parseStructuredOutputMode(values.EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE) === undefined) markInvalid('EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE', 'must be native_json_schema, json_object, or prompt_json')
+  if (values.EVORESEARCH_MODEL_STREAMING !== undefined && parseStreamingMode(values.EVORESEARCH_MODEL_STREAMING) === undefined) markInvalid('EVORESEARCH_MODEL_STREAMING', 'must be required, preferred, or disabled')
   // Keep the credential available to the gateway caller while preventing
   // accidental inclusion in JSON snapshots, logs, or object spreads.
-  const result = { baseUrl, apiKey, model, provider, structuredOutputMode, streaming, dotenvPath, dotenvLoaded, sources, missing, invalid, ready: missing.length === 0 && invalid.length === 0 }
+  const result = { baseUrl, apiKey, model, provider, structuredOutputMode, streaming, dotenvPath, dotenvLoaded, sources, missing, invalid, invalidReasons, ready: missing.length === 0 && invalid.length === 0 }
   Object.defineProperty(result, 'apiKey', { value: apiKey, enumerable: false, writable: false, configurable: false })
   return result
 }
 
 export function safeModelConfigurationSnapshot(config: ResolvedModelConfiguration): SafeModelConfigurationSnapshot {
-  return { baseUrl: config.baseUrl, model: config.model, provider: config.provider, structuredOutputMode: config.structuredOutputMode, streaming: config.streaming, baseUrlConfigured: Boolean(config.baseUrl), apiKeyConfigured: Boolean(config.apiKey), modelConfigured: Boolean(config.model), dotenvPath: config.dotenvPath, dotenvLoaded: config.dotenvLoaded, sources: { ...config.sources }, missing: [...config.missing], invalid: [...config.invalid], ready: config.ready }
+  return { baseUrl: config.baseUrl, model: config.model, provider: config.provider, structuredOutputMode: config.structuredOutputMode, streaming: config.streaming, baseUrlConfigured: Boolean(config.baseUrl), apiKeyConfigured: Boolean(config.apiKey), modelConfigured: Boolean(config.model), dotenvPath: config.dotenvPath, dotenvLoaded: config.dotenvLoaded, sources: { ...config.sources }, missing: [...config.missing], invalid: [...config.invalid], invalidReasons: { ...config.invalidReasons }, ready: config.ready }
 }
 
 export function configurationDiagnostics(config: ResolvedModelConfiguration): string[] {
-  return [...config.missing.map(key => `Missing configuration: ${key}`), ...config.invalid.map(key => `Invalid configuration: ${key}`)]
+  return [...config.missing.map(key => `Missing configuration: ${key}`), ...config.invalid.map(key => `Invalid configuration: ${key}${config.invalidReasons[key] ? ` (${config.invalidReasons[key]})` : ''}`)]
 }
 
 // Short aliases keep entrypoint wiring readable while preserving one resolver
@@ -165,6 +176,11 @@ export const loadModelConfiguration = resolveModelConfiguration
 export const loadDotEnv = parseDotEnv
 
 function trim(value: string | undefined): string { return typeof value === 'string' ? value.trim() : '' }
+function isPlaceholder(value: string): boolean { return /^<[^>]+>$/u.test(value) || /^\$\{[^}]+\}$/u.test(value) || /^(?:your|replace|change)[-_ ]?(?:value|key|token|url|model|endpoint|me)$/iu.test(value) || /^(?:changeme|change_me|todo|tbd)$/iu.test(value) }
+function isHttpUrl(value: string): boolean {
+  if (isPlaceholder(value)) return false
+  try { const url = new URL(value); return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname) } catch { return false }
+}
 function normalizeBaseUrl(value: string): string {
   const trimmed = value.trim()
   try {

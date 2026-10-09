@@ -115,12 +115,15 @@ function makeEvents(input: Generation0ExtensionInput, gap: GapDiscoveryResult, p
   append('stage.started', { stage: 'GAP_DISCOVERY' })
   for (const attempt of attempts) append('model.attempt', { stage: 'GAP_DISCOVERY', role: 'GapDiscovery', attemptId: attempt.attemptId, status: attempt.status, validationErrors: attempt.validationErrors })
   append(attempts.some(attempt => attempt.status === 'SUCCEEDED') || !attempts.length ? 'stage.completed' : 'stage.failed', { stage: 'GAP_DISCOVERY', gapCount: gap.gaps.length })
-  append('stage.started', { stage: 'GENERATION_0' })
-  for (const attempt of population.modelAttempts) append('model.attempt', { stage: 'GENERATION_0', role: 'HypothesisGenerator', attemptId: attempt.attemptId, status: attempt.ok ? 'SUCCEEDED' : 'FAILED', validationErrors: attempt.validationErrors })
   const generationStatus = (population as Generation0Population & { generationStatus?: string }).generationStatus ?? 'COMPLETE'
-  append(generationStatus === 'COMPLETE' || generationStatus === 'COMPLETE_EMPTY' ? 'stage.completed' : 'stage.failed', { stage: 'GENERATION_0', status: generationStatus, acceptedHypothesisCount: population.hypotheses.length })
-  for (const hypothesis of population.hypotheses) append('hypothesis.created', { stage: 'GENERATION_0', hypothesisId: hypothesis.hypothesisId, generation: 0, status: hypothesis.status, noveltyStatus: hypothesis.noveltyStatus })
-  append('checkpoint.created', { stage: 'GENERATION_0', checkpointId: checkpoint.checkpointId, gapIds: gap.gaps.map(item => item.gapId), populationIds: checkpoint.populationIds, status: generationStatus })
+  if (generationStatus !== 'GAP_MODEL_FAILED') {
+    append('stage.started', { stage: 'GENERATION_0' })
+    for (const attempt of population.modelAttempts) append('model.attempt', { stage: 'GENERATION_0', role: 'HypothesisGenerator', attemptId: attempt.attemptId, status: attempt.ok ? 'SUCCEEDED' : 'FAILED', validationErrors: attempt.validationErrors })
+    append(generationStatus === 'COMPLETE' || generationStatus === 'COMPLETE_EMPTY' ? 'stage.completed' : 'stage.failed', { stage: 'GENERATION_0', status: generationStatus, acceptedHypothesisCount: population.hypotheses.length })
+    for (const hypothesis of population.hypotheses) append('hypothesis.created', { stage: 'GENERATION_0', hypothesisId: hypothesis.hypothesisId, generation: 0, status: hypothesis.status, noveltyStatus: hypothesis.noveltyStatus })
+  }
+  const checkpointStatus = generationStatus === 'GAP_MODEL_FAILED' ? 'BLOCKED_BY_UPSTREAM' : generationStatus
+  append('checkpoint.created', { stage: 'GENERATION_0', checkpointId: checkpoint.checkpointId, gapIds: gap.gaps.map(item => item.gapId), populationIds: checkpoint.populationIds, status: checkpointStatus })
   for (const event of events) parseDomainEvent(event)
   return events
 }
@@ -146,7 +149,10 @@ function boundaryRecord(input: Generation0ExtensionInput, boundary: Generation0B
   const stateHash = contentHash(canonicalJson(state))
   const sequence = events.length + 1
   const checkpoint: Checkpoint = { checkpointId: deterministicId('checkpoint', { runId: input.runId, boundary, sequence, stateHash }), runId: input.runId as RunId, sequence, stateHash, populationIds: populationIds as never, budget, createdAt: input.now }
-  appendEvent(events, input, 'checkpoint.created', { stage: boundary, boundary, checkpointId: checkpoint.checkpointId, stateHash })
+  const boundaryStatus = boundary === 'GENERATION_0' && (value as { generation0?: { generationStatus?: string } } | undefined)?.generation0?.generationStatus === 'GAP_MODEL_FAILED'
+    ? 'BLOCKED_BY_UPSTREAM'
+    : undefined
+  appendEvent(events, input, 'checkpoint.created', { stage: boundary, boundary, checkpointId: checkpoint.checkpointId, stateHash, ...(boundaryStatus ? { status: boundaryStatus } : {}) })
   return { schemaVersion: 'generation0.boundary.v1', boundary, runId: String(input.runId), ...(input.sourceRunId ? { sourceRunId: input.sourceRunId } : {}), ...(input.configuration === undefined ? {} : { configHash: contentHash(canonicalJson(input.configuration)) }), ...(input.corpusCutoff ? { corpusCutoff: input.corpusCutoff } : {}), stateHash, state, value, checkpoint, events: [...events], committedAt: input.now }
 }
 
@@ -281,17 +287,21 @@ export async function runGeneration0Extension(input: Generation0ExtensionInput, 
   const usage = { ...budget.usage, maxModelCalls: Math.min(budget.limits.maxModelCalls, budget.usage.maxModelCalls + modelCalls), maxCandidates: Math.min(budget.limits.maxCandidates, budget.usage.maxCandidates + generation0.hypotheses.length) }
   const finalBudget = { limits: budget.limits, usage }
   if (store) {
-    appendEvent(events, input, 'stage.started', { stage: 'GENERATION_0' })
-    for (const attempt of generation0.modelAttempts) appendEvent(events, input, 'model.attempt', { stage: 'GENERATION_0', role: 'HypothesisGenerator', attemptId: attempt.attemptId, status: attempt.ok ? 'SUCCEEDED' : 'FAILED', validationErrors: attempt.validationErrors })
-    appendEvent(events, input, status === 'GENERATION_FAILED' || status === 'GAP_MODEL_FAILED' ? 'stage.failed' : 'stage.completed', { stage: 'GENERATION_0', status, acceptedHypothesisCount: generation0.hypotheses.length })
-    for (const hypothesis of generation0.hypotheses) appendEvent(events, input, 'hypothesis.created', { stage: 'GENERATION_0', hypothesisId: hypothesis.hypothesisId, generation: 0 })
+    if (status !== 'GAP_MODEL_FAILED') {
+      appendEvent(events, input, 'stage.started', { stage: 'GENERATION_0' })
+      for (const attempt of generation0.modelAttempts) appendEvent(events, input, 'model.attempt', { stage: 'GENERATION_0', role: 'HypothesisGenerator', attemptId: attempt.attemptId, status: attempt.ok ? 'SUCCEEDED' : 'FAILED', validationErrors: attempt.validationErrors })
+      appendEvent(events, input, status === 'GENERATION_FAILED' ? 'stage.failed' : 'stage.completed', { stage: 'GENERATION_0', status, acceptedHypothesisCount: generation0.hypotheses.length })
+      for (const hypothesis of generation0.hypotheses) appendEvent(events, input, 'hypothesis.created', { stage: 'GENERATION_0', hypothesisId: hypothesis.hypothesisId, generation: 0 })
+    }
     const finalRecord = boundaryRecord(recordInput, 'GENERATION_0', state, { gapReasoning, gapDiscovery: gapReasoning.gapDiscovery, generation0 }, events, { limits: finalBudget.limits, usage: finalBudget.usage }, generation0.hypotheses.map(item => item.hypothesisId))
     store.commit(finalRecord); events = [...finalRecord.events]; boundaryCheckpoints.GENERATION_0 = finalRecord.checkpoint
     const limitations = [...new Set([...gapReasoning.limitations, ...generation0.limitations, ...(options.allowUnverifiedEvidence ? ['Legacy source evidence was accepted without content-hash revalidation; it remains unverified.'] : [])])].sort()
     return { status, runId: input.runId, sourceRunId, gapReasoning, gapDiscovery: gapReasoning.gapDiscovery, generation0, events, checkpoint: finalRecord.checkpoint, stateHash: finalRecord.stateHash, acceptedHypothesisCount: generation0.hypotheses.length, limitations, boundaryCheckpoints }
   }
   const sequenceBase = initialEvents.length
-  const sequence = sequenceBase + 4 + gapReasoning.attempts.length + generation0.modelAttempts.length + generation0.hypotheses.length + 1
+  const generationStatus = (generation0 as Generation0Population & { generationStatus?: string }).generationStatus ?? status
+  const generationEvents = generationStatus === 'GAP_MODEL_FAILED' ? 0 : 2 + generation0.modelAttempts.length + generation0.hypotheses.length
+  const sequence = sequenceBase + 2 + gapReasoning.attempts.length + generationEvents + 1
   const checkpoint: Checkpoint = { checkpointId: deterministicId('checkpoint', { runId: input.runId, sequence, stateHash }), runId: input.runId as RunId, sequence, stateHash, populationIds: generation0.hypotheses.map(item => item.hypothesisId), budget: { limits: finalBudget.limits, usage: finalBudget.usage }, createdAt: input.now }
   parseCheckpoint(checkpoint)
   const extensionEvents = makeEvents({ ...input, startingSequence: sequenceBase }, gapReasoning.gapDiscovery, generation0, checkpoint, gapReasoning.attempts)

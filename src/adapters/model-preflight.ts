@@ -1,4 +1,4 @@
-import { consumeResponsesStream, normalizeBaseUrl, parseJsonText, parseStreamingMode, type ProviderErrorDiagnostic, type StreamErrorCategory, type StreamingMode, type StructuredOutputMode } from './responses-model.ts'
+import { buildResponsesEndpoint, consumeResponsesStream, normalizeBaseUrl, parseJsonText, parseStreamingMode, type ProviderErrorDiagnostic, type StreamErrorCategory, type StreamingMode, type StructuredOutputMode } from './responses-model.ts'
 import { env } from 'node:process'
 
 export const PREFLIGHT_MAX_ATTEMPTS = 2
@@ -87,7 +87,7 @@ export async function preflightModel(options: ModelPreflightOptions = {}): Promi
   const model = options.model ?? env.EVORESEARCH_MODEL ?? ''
   const structuredOutputMode = options.structuredOutputMode ?? options.mode ?? (env.EVORESEARCH_MODEL_STRUCTURED_OUTPUT_MODE as StructuredOutputMode | undefined) ?? 'prompt_json'
   const streaming = options.streaming ?? parseStreamingMode(env.EVORESEARCH_MODEL_STREAMING) ?? 'required'
-  const endpoint = `${baseUrl}/responses`
+  const endpoint = buildResponsesEndpoint(baseUrl)
   const missing = [!baseUrl ? 'EVORESEARCH_MODEL_BASE_URL' : '', !apiKey ? 'EVORESEARCH_MODEL_API_KEY' : '', !model ? 'EVORESEARCH_MODEL' : ''].filter(Boolean)
   if (missing.length) return { baseUrl, model, apiKeyConfigured: Boolean(apiKey), endpoint, reachable: false, responseSucceeded: false, normalizedText: false, structuredOutputMode, streaming, structuredOutputSupported: false, errorCategory: 'CONFIGURATION', error: `Missing configuration: ${missing.join(', ')}`, retryable: false, attemptCount: 0, attempts: [] }
 
@@ -215,7 +215,11 @@ export function sanitizeEndpoint(value: string): string {
     url.hash = ''
     return url.toString().replace(/\/$/, '')
   } catch {
-    return value.split(/[?#]/, 1)[0].replace(/\/+$/, '')
+    const withoutQuery = value.split(/[?#]/, 1)[0].replace(/\/+$/, '')
+    const scheme = withoutQuery.indexOf('://')
+    return scheme >= 0
+      ? `${withoutQuery.slice(0, scheme + 3)}${withoutQuery.slice(scheme + 3).replace(/^[^/]*@/u, '')}`
+      : withoutQuery
   }
 }
 export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
